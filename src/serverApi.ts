@@ -10,8 +10,33 @@ import {
 } from './serverStorage.ts';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { exec } from 'child_process';
 import { presenceTracker } from './presenceTracker.ts';
+
+interface VoiceClipEntry {
+  mime: string;
+  buffer: Buffer;
+  createdAt: number;
+}
+
+const VOICE_CLIP_TTL_MS = 15 * 60 * 1000;
+const VOICE_CLIP_MAX_ITEMS = 120;
+const voiceClipStore = new Map<string, VoiceClipEntry>();
+
+function pruneVoiceClipStore() {
+  const now = Date.now();
+  for (const [id, entry] of voiceClipStore.entries()) {
+    if (now - entry.createdAt > VOICE_CLIP_TTL_MS) {
+      voiceClipStore.delete(id);
+    }
+  }
+  while (voiceClipStore.size > VOICE_CLIP_MAX_ITEMS) {
+    const oldestKey = voiceClipStore.keys().next().value;
+    if (!oldestKey) break;
+    voiceClipStore.delete(oldestKey);
+  }
+}
 import {
   ackServerUnreadSettlements,
   advanceServerBookingCarriage,
@@ -1244,18 +1269,79 @@ export async function handleApiRoute(
     return true;
   }
 
+  // 7.4b Ephemeral HTTP Voice Clip Upload & Streaming Endpoints (prevents WebSocket head-of-line blocking)
+  if (pathname === '/api/voice/upload' && method === 'POST') {
+    try {
+      const body = await parseJsonBody(req);
+      const rawAudio = typeof body?.audio === 'string' ? body.audio.trim() : '';
+      const match = rawAudio.match(/^data:(audio\/[a-zA-Z0-9.+-]+)(?:;[a-zA-Z0-9.=_-]+)*;base64,([A-Za-z0-9+/=]+)$/);
+      if (!match) {
+        sendJson(res, 400, { success: false, error: '无效的语音音频格式' });
+        return true;
+      }
+      const mime = match[1];
+      const buffer = Buffer.from(match[2], 'base64');
+      if (buffer.length === 0 || buffer.length > 650_000) {
+        sendJson(res, 413, { success: false, error: '语音文件过大或为空' });
+        return true;
+      }
+      pruneVoiceClipStore();
+      const voiceId = `v_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+      voiceClipStore.set(voiceId, { mime, buffer, createdAt: Date.now() });
+      sendJson(res, 200, {
+        success: true,
+        voiceId,
+        voiceUrl: `/api/voice/${voiceId}`,
+      });
+    } catch (e) {
+      sendJson(res, 500, { success: false, error: String(e) });
+    }
+    return true;
+  }
+
+  if (pathname.startsWith('/api/voice/') && method === 'GET') {
+    const voiceId = pathname.slice('/api/voice/'.length).replace(/[^a-zA-Z0-9_-]/g, '');
+    const entry = voiceId ? voiceClipStore.get(voiceId) : undefined;
+    if (!entry || Date.now() - entry.createdAt > VOICE_CLIP_TTL_MS) {
+      if (voiceId) voiceClipStore.delete(voiceId);
+      sendJson(res, 404, { success: false, error: '语音已过期或不存在' });
+      return true;
+    }
+    if (typeof res.status === 'function' && typeof res.send === 'function') {
+      res
+        .status(200)
+        .set('Content-Type', entry.mime)
+        .set('Cache-Control', 'public, max-age=900')
+        .send(entry.buffer);
+    } else {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', entry.mime);
+      res.setHeader('Cache-Control', 'public, max-age=900');
+      res.setHeader('Content-Length', String(entry.buffer.length));
+      res.end(entry.buffer);
+    }
+    return true;
+  }
+
   // 7.5 Real-time Presence Counts & Players Endpoint
   if (pathname === '/api/presence' && method === 'GET') {
     try {
       const counts = presenceTracker.getRealGamePresence();
-      const db = loadDatabase();
-      const players = presenceTracker.getAllPlayers(db.profiles || {});
-      sendJson(res, 200, {
-        success: true,
-        ...counts,
-        playersCount: players.length,
-        players,
-      });
+      if (urlObj.searchParams.get('includePlayers') === '1') {
+        const db = loadDatabase();
+        const players = presenceTracker.getAllPlayers(db.profiles || {});
+        sendJson(res, 200, {
+          success: true,
+          ...counts,
+          playersCount: players.length,
+          players,
+        });
+      } else {
+        sendJson(res, 200, {
+          success: true,
+          ...counts,
+        });
+      }
     } catch (e) {
       sendJson(res, 500, { success: false, error: String(e) });
     }

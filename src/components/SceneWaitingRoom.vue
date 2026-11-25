@@ -385,6 +385,7 @@ import SeatCard from './waiting/SeatCard.vue';
 import { UserProfile } from '../utils/storage';
 import { TableTheme } from '../utils/theme';
 import { soundFX } from '../utils/sound';
+import { uploadVoiceBlob, resolveVoicePlayUrl } from '../utils/voiceUpload';
 import { generateRoomDeal } from '../gameDeckService';
 import { createYansanDeal } from '../games/yansan/deck';
 
@@ -856,12 +857,11 @@ function stopAndSendVoiceRecording() {
       const audioBlob = new Blob(voiceChunks, { type: mime });
       voiceChunks = [];
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64Data = reader.result as string;
-        sendVoiceBroadcastMessage(base64Data, duration);
-      };
-      reader.readAsDataURL(audioBlob);
+      void uploadVoiceBlob(audioBlob).then((uploaded) => {
+        if (uploaded.audioUrl || uploaded.audio) {
+          sendVoiceBroadcastMessage(uploaded, duration);
+        }
+      });
     } catch {}
     voiceRecorder = null;
   };
@@ -903,7 +903,7 @@ function cancelVoiceRecording() {
   soundFX.playTap();
 }
 
-function sendVoiceBroadcastMessage(audioDataUrl: string, duration: number) {
+function sendVoiceBroadcastMessage(voicePayload: { audioUrl?: string; audio?: string }, duration: number) {
   if (props.ws && props.ws.readyState === WebSocket.OPEN) {
     try {
       props.ws.send(
@@ -915,7 +915,8 @@ function sendVoiceBroadcastMessage(audioDataUrl: string, duration: number) {
           senderId: props.currentUser.id,
           text: `🎤 [等候室实时语音 ${duration}s]`,
           voice: true,
-          audio: audioDataUrl,
+          audioUrl: voicePayload.audioUrl,
+          audio: voicePayload.audio,
           duration,
         })
       );
@@ -1055,10 +1056,11 @@ function handleWsMessage(event: MessageEvent) {
       if (msg.gameType === props.gameType && msg.sceneMode === props.sceneMode) {
         const isMyOwnVoice = (msg.senderId && msg.senderId === props.currentUser.id) ||
                              (msg.sender && msg.sender === props.currentUser.name);
-        if (msg.audio) {
+        const voiceSrc = resolveVoicePlayUrl(msg.audioUrl || msg.audio);
+        if (voiceSrc) {
           // 仅当接收到的语音广播来源于房间内【其他牌友】时才播报录音组件，发送者本人无需二次收听
           if (!isMyOwnVoice) {
-            playVoiceBroadcast(msg.audio, msg.sender, msg.duration || 1);
+            playVoiceBroadcast(voiceSrc, msg.sender, msg.duration || 1);
             soundFX.playTap();
           }
         } else if (msg.voice && msg.text) {
@@ -1078,8 +1080,9 @@ function handleWsMessage(event: MessageEvent) {
     } else if (msg.type === 'chat_broadcast') {
       const isMyOwnVoice = (msg.message?.senderId && msg.message.senderId === props.currentUser.id) ||
                            (msg.message?.sender && msg.message.sender === props.currentUser.name);
-      if (msg.message?.audio && !isMyOwnVoice) {
-        playVoiceBroadcast(msg.message.audio, msg.message.sender, msg.message.duration || 1);
+      const roomVoiceSrc = resolveVoicePlayUrl(msg.message?.audioUrl || msg.message?.audio);
+      if (roomVoiceSrc && !isMyOwnVoice) {
+        playVoiceBroadcast(roomVoiceSrc, msg.message.sender, msg.message.duration || 1);
       }
     }
   } catch {}

@@ -88,6 +88,9 @@ func main() {
 	fmt.Println("\n[Go Server] 正在保存状态并安全停止服务...")
 	tm.stopPolling()
 	hub.stop()
+	if err := sm.FlushSync(); err != nil {
+		log.Printf("[Go Server] FlushSync warning: %v", err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = server.Shutdown(ctx)

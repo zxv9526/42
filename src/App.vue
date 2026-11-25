@@ -1078,6 +1078,7 @@ import {
 
 import { soundFX } from './utils/sound';
 import { haptics } from './utils/haptics';
+import { uploadVoiceBlob, resolveVoicePlayUrl } from './utils/voiceUpload';
 import { TableTheme, getGameTheme } from './utils/theme';
 import {
   loadLocalProfile,
@@ -1141,11 +1142,17 @@ onMounted(() => {
   fetchRealPresence();
   fetchTeahousePlayers();
 
-  // Periodically refresh real connected player presence and teahouse players roster
+  // Periodically refresh presence only when WebSocket is disconnected (WS pushes real-time updates)
   presenceInterval = window.setInterval(() => {
-    fetchRealPresence();
-    fetchTeahousePlayers();
-  }, 3500);
+    if (wsConnected.value) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (currentView.value !== 'arena') {
+      fetchRealPresence();
+    }
+    if (currentView.value === 'lobby' || currentView.value === 'chatroom') {
+      fetchTeahousePlayers();
+    }
+  }, 5000);
 });
 
 onBeforeUnmount(() => {
@@ -1976,7 +1983,9 @@ function enterTeahouseChatroom() {
   }
   currentView.value = 'chatroom';
   notifyPresence(activeGameType.value || 'lobby', activeSceneMode.value || '');
-  fetchTeahousePlayers();
+  if (!wsConnected.value) {
+    fetchTeahousePlayers();
+  }
   if (ws && ws.readyState === WebSocket.OPEN) {
     try {
       ws.send(JSON.stringify({ type: 'request_teahouse_players' }));
@@ -2958,10 +2967,11 @@ function connectWs(forceReconnect = false) {
         }
         const isMyOwnVoice = (msg.message?.senderId && msg.message.senderId === userProfile.id) ||
                              (msg.message?.sender && msg.message.sender === userProfile.name);
-        if (msg.message.audio) {
+        const voiceSrc = resolveVoicePlayUrl(msg.message?.audioUrl || msg.message?.audio);
+        if (voiceSrc) {
           // 发送者本人无需二次播放自己录制的语音，仅牌桌内其他牌友收听
           if (!isMyOwnVoice) {
-            playVoiceBroadcast(msg.message.audio, msg.message.sender, msg.message.duration || 1);
+            playVoiceBroadcast(voiceSrc, msg.message.sender, msg.message.duration || 1);
           }
         } else if (msg.message.voice && msg.message.text) {
           if (!isMyOwnVoice) {
@@ -3373,12 +3383,11 @@ function stopAndSendVoiceRecording() {
       const audioBlob = new Blob(voiceChunks, { type: mime });
       voiceChunks = [];
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64Data = reader.result as string;
-        sendVoiceBroadcastMessage(base64Data, duration);
-      };
-      reader.readAsDataURL(audioBlob);
+      void uploadVoiceBlob(audioBlob).then((uploaded) => {
+        if (uploaded.audioUrl || uploaded.audio) {
+          sendVoiceBroadcastMessage(uploaded, duration);
+        }
+      });
     } catch {}
     voiceRecorder = null;
   };
@@ -3420,7 +3429,7 @@ function cancelVoiceRecording() {
   soundFX.playTap();
 }
 
-function sendVoiceBroadcastMessage(audioDataUrl: string, duration: number) {
+function sendVoiceBroadcastMessage(voicePayload: { audioUrl?: string; audio?: string }, duration: number) {
   const roomId = activeRoomId.value;
   if (ws && ws.readyState === WebSocket.OPEN && roomId) {
     ws.send(
@@ -3432,13 +3441,17 @@ function sendVoiceBroadcastMessage(audioDataUrl: string, duration: number) {
         avatar: userProfile.avatar || '👤',
         text: `🎤 [牌桌实时语音 ${duration}s]`,
         voice: true,
-        audio: audioDataUrl,
+        audioUrl: voicePayload.audioUrl,
+        audio: voicePayload.audio,
         duration,
       })
     );
     addPacketLog('OUT', `VOICE_MSG: ${duration}s`);
   } else {
-    playVoiceBroadcast(audioDataUrl, userProfile.name || '我', duration);
+    const localUrl = resolveVoicePlayUrl(voicePayload.audioUrl || voicePayload.audio);
+    if (localUrl) {
+      playVoiceBroadcast(localUrl, userProfile.name || '我', duration);
+    }
   }
 }
 
@@ -3871,8 +3884,9 @@ onMounted(() => {
   fetchFreshProfile();
   let lastBgProfileSync = Date.now();
   sessionCheckInterval = setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return;
     const now = Date.now();
-    const minInterval = wsConnected.value ? 90000 : 20000;
+    const minInterval = wsConnected.value ? 180000 : 20000;
     if (now - lastBgProfileSync >= minInterval) {
       lastBgProfileSync = now;
       fetchFreshProfile();

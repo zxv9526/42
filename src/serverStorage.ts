@@ -125,6 +125,7 @@ const defaultDatabase: DatabaseSchema = {
 let dbCache: DatabaseSchema | null = null;
 let saveTimer: NodeJS.Timeout | null = null;
 let pendingSave = false;
+let isSavingAsync = false;
 
 export function normalizePhone(raw: string): string {
   let p = String(raw || '').trim().replace(/\D/g, '');
@@ -298,6 +299,31 @@ export function flushDatabaseSync(data?: DatabaseSchema): void {
   }
 }
 
+async function flushDatabaseAsync(): Promise<void> {
+  if (isSavingAsync || !pendingSave || !dbCache) return;
+  isSavingAsync = true;
+  try {
+    while (pendingSave && dbCache) {
+      pendingSave = false;
+      const snapshotJson = JSON.stringify(dbCache);
+      let tempFile = '';
+      try {
+        await fs.promises.mkdir(DATA_DIR, { recursive: true });
+        tempFile = `${DB_FILE}.tmp.${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        await fs.promises.writeFile(tempFile, snapshotJson, 'utf-8');
+        await fs.promises.rename(tempFile, DB_FILE);
+      } catch (err) {
+        if (tempFile) {
+          try { await fs.promises.unlink(tempFile); } catch {}
+        }
+        console.error('Failed saving database asynchronously:', err);
+      }
+    }
+  } finally {
+    isSavingAsync = false;
+  }
+}
+
 export function saveDatabase(data: DatabaseSchema): void {
   if (Array.isArray(data.records) && data.records.length > 1000) {
     data.records = data.records.slice(-1000);
@@ -314,23 +340,8 @@ export function saveDatabase(data: DatabaseSchema): void {
 
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    if (!pendingSave || !dbCache) return;
-    let tempFile = '';
-    try {
-      if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-      }
-      tempFile = `${DB_FILE}.tmp.${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      fs.writeFileSync(tempFile, JSON.stringify(dbCache, null, 2), 'utf-8');
-      fs.renameSync(tempFile, DB_FILE);
-      pendingSave = false;
-    } catch (err) {
-      if (tempFile && fs.existsSync(tempFile)) {
-        try { fs.unlinkSync(tempFile); } catch {}
-      }
-      console.error('Failed saving database asynchronously:', err);
-    }
-  }, 200);
+    void flushDatabaseAsync();
+  }, 600);
 }
 
 export function recordAdminLog(

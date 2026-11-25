@@ -213,26 +213,59 @@ export function createRealtimeHub(wss: WebSocketServer): (payload: unknown) => v
     return true;
   }
 
+  function sanitizeVoiceUrl(raw: unknown): string | null {
+    if (typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.length > 300) return null;
+    if (trimmed.startsWith('/api/voice/')) return trimmed;
+    if (/^https?:\/\/[^/]+\/api\/voice\/[a-zA-Z0-9_-]+$/.test(trimmed)) return trimmed;
+    return null;
+  }
+
   const ACTIVE_SNAPSHOT_FILE = path.resolve(process.cwd(), 'data', 'active_rooms_snapshot.json');
   let snapshotSaveTimer: NodeJS.Timeout | null = null;
+  let isSnapshotWriting = false;
+  let pendingSnapshot = false;
+  async function flushActiveRoomsSnapshotAsync() {
+    if (process.env.DISABLE_ACTIVE_ROOM_SNAPSHOT === '1') return;
+    if (isSnapshotWriting) {
+      pendingSnapshot = true;
+      return;
+    }
+    isSnapshotWriting = true;
+    try {
+      do {
+        pendingSnapshot = false;
+        const dir = path.dirname(ACTIVE_SNAPSHOT_FILE);
+        await fs.promises.mkdir(dir, { recursive: true });
+        const defaultRoomIds = new Set(['RM-202', 'RM-204', 'RM-205']);
+        const savedRooms = Array.from(rooms.values())
+          .filter((r: any) => r && !defaultRoomIds.has(r.id) && (r.status === 'playing' || r.status === 'starting' || r.status === 'waiting'))
+          .slice(0, 50)
+          .map((r: any) => ({
+            ...r,
+            chat: Array.isArray(r.chat)
+              ? r.chat.slice(-30).map((c: any) => (c?.audio ? { ...c, audio: null } : c))
+              : r.chat,
+          }));
+        const savedWaiting = Array.from(sceneWaitingRooms.values()).slice(0, 50);
+        const payload = JSON.stringify({ savedAt: Date.now(), rooms: savedRooms, sceneWaitingRooms: savedWaiting });
+        const tmpFile = `${ACTIVE_SNAPSHOT_FILE}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 6)}`;
+        await fs.promises.writeFile(tmpFile, payload, 'utf-8');
+        await fs.promises.rename(tmpFile, ACTIVE_SNAPSHOT_FILE);
+      } while (pendingSnapshot);
+    } catch {
+    } finally {
+      isSnapshotWriting = false;
+    }
+  }
   function scheduleActiveRoomsSnapshot() {
     if (process.env.DISABLE_ACTIVE_ROOM_SNAPSHOT === '1') return;
     if (snapshotSaveTimer) clearTimeout(snapshotSaveTimer);
     snapshotSaveTimer = setTimeout(() => {
       snapshotSaveTimer = null;
-      try {
-        const dir = path.dirname(ACTIVE_SNAPSHOT_FILE);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        const defaultRoomIds = new Set(['RM-202', 'RM-204', 'RM-205']);
-        const savedRooms = Array.from(rooms.values())
-          .filter((r: any) => r && !defaultRoomIds.has(r.id) && (r.status === 'playing' || r.status === 'starting' || r.status === 'waiting'))
-          .slice(0, 50);
-        const savedWaiting = Array.from(sceneWaitingRooms.values()).slice(0, 50);
-        const tmpFile = `${ACTIVE_SNAPSHOT_FILE}.tmp.${Date.now()}`;
-        fs.writeFileSync(tmpFile, JSON.stringify({ savedAt: Date.now(), rooms: savedRooms, sceneWaitingRooms: savedWaiting }), 'utf-8');
-        fs.renameSync(tmpFile, ACTIVE_SNAPSHOT_FILE);
-      } catch {}
-    }, 500);
+      void flushActiveRoomsSnapshotAsync();
+    }, 1500);
   }
 
   if (process.env.DISABLE_ACTIVE_ROOM_SNAPSHOT !== '1') {
@@ -272,17 +305,22 @@ export function createRealtimeHub(wss: WebSocketServer): (payload: unknown) => v
     } catch {}
   }
 
+  let teahousePlayersTimer: NodeJS.Timeout | null = null;
   function broadcastTeahousePlayers() {
-    try {
-      const db = loadDatabase();
-      const players = presenceTracker.getAllPlayers(db.profiles || {});
-      broadcast({
-        type: 'teahouse_players_update',
-        count: players.length,
-        onlineCount: players.filter((p: any) => p.isOnline).length,
-        players,
-      });
-    } catch {}
+    if (teahousePlayersTimer) return;
+    teahousePlayersTimer = setTimeout(() => {
+      teahousePlayersTimer = null;
+      try {
+        const db = loadDatabase();
+        const players = presenceTracker.getAllPlayers(db.profiles || {});
+        broadcast({
+          type: 'teahouse_players_update',
+          count: players.length,
+          onlineCount: players.filter((p: any) => p.isOnline).length,
+          players,
+        });
+      } catch {}
+    }, 500);
   }
 
   function resetSceneRoomReadyAndCleanDisconnected(roomId: string) {
@@ -619,14 +657,6 @@ export function createRealtimeHub(wss: WebSocketServer): (payload: unknown) => v
           counts: presenceCounts,
           players: teahousePlayers,
           serverTs: Date.now(),
-        })
-      );
-      ws.send(
-        JSON.stringify({
-          type: 'teahouse_players_update',
-          count: teahousePlayers.length,
-          onlineCount: teahousePlayers.filter((p: any) => p.isOnline).length,
-          players: teahousePlayers,
         })
       );
     } catch {}
@@ -1580,9 +1610,10 @@ export function createRealtimeHub(wss: WebSocketServer): (payload: unknown) => v
 
         if (msg.type === 'scene_chat') {
           if (!allowSocketChat(ws)) return;
-          const safeAudio = typeof msg.audio === 'string' && msg.audio.length <= 450_000 ? msg.audio : null;
+          const safeAudioUrl = sanitizeVoiceUrl(msg.audioUrl);
+          const safeAudio = !safeAudioUrl && typeof msg.audio === 'string' && msg.audio.length <= 450_000 ? msg.audio : null;
           const safeChatText = sanitizeWsText(msg.text, 300);
-          if (!safeChatText && !safeAudio) return;
+          if (!safeChatText && !safeAudio && !safeAudioUrl) return;
 
           const isChallenge = msg.action === 'challenge';
           const targetChannel = isChallenge ? 'hall' : msg.channel || 'hall';
@@ -1681,7 +1712,7 @@ export function createRealtimeHub(wss: WebSocketServer): (payload: unknown) => v
             senderId: msg.senderId || null,
             avatar: sanitizeWsText(msg.avatar, 12) || '👑',
             text: safeChatText || '🎤 [等候室实时语音]',
-            voice: Boolean(msg.voice && safeAudio) || Boolean(msg.voice && msg.phraseText),
+            voice: Boolean(msg.voice && (safeAudio || safeAudioUrl || msg.phraseText)),
             phraseText: msg.phraseText ? sanitizeWsText(msg.phraseText, 200) : null,
             roleId: msg.roleId || null,
             roleName: msg.roleName ? sanitizeWsText(msg.roleName, 24) : null,
@@ -1689,6 +1720,7 @@ export function createRealtimeHub(wss: WebSocketServer): (payload: unknown) => v
             rate: typeof msg.rate === 'number' ? msg.rate : 1.0,
             isFemale: Boolean(msg.isFemale),
             audio: safeAudio,
+            audioUrl: safeAudioUrl,
             duration: Math.max(0, Math.min(30, Number(msg.duration) || 0)),
             action: msg.action || null,
             targetPlayerId: msg.targetPlayerId || null,
@@ -2084,19 +2116,21 @@ export function createRealtimeHub(wss: WebSocketServer): (payload: unknown) => v
           if (!allowSocketChat(ws)) return;
           const targetRoomId = msg.roomId || 'RM-202';
           const room = rooms.get(targetRoomId);
-          const safeAudio = typeof msg.audio === 'string' && msg.audio.length <= 450_000 ? msg.audio : null;
+          const safeAudioUrl = sanitizeVoiceUrl(msg.audioUrl);
+          const safeAudio = !safeAudioUrl && typeof msg.audio === 'string' && msg.audio.length <= 450_000 ? msg.audio : null;
           const safeText = sanitizeWsText(msg.text, 120);
-          if (safeText || safeAudio) {
+          if (safeText || safeAudio || safeAudioUrl) {
             const chatMsg = {
               id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
               sender: sanitizeWsText(msg.sender, 24) || '牌友',
               senderId: msg.senderId || null,
               avatar: sanitizeWsText(msg.avatar, 12) || '👤',
-              text: safeText || (safeAudio ? '🎤 [牌桌实时语音]' : ''),
+              text: safeText || (safeAudio || safeAudioUrl ? '🎤 [牌桌实时语音]' : ''),
               prop: msg.prop || null,
               targetSeat: msg.targetSeat !== undefined ? msg.targetSeat : null,
-              voice: Boolean(msg.voice && safeAudio),
+              voice: Boolean(msg.voice && (safeAudio || safeAudioUrl)),
               audio: safeAudio,
+              audioUrl: safeAudioUrl,
               duration: Math.max(0, Math.min(30, Number(msg.duration) || 0)),
               timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
             };
@@ -2263,12 +2297,16 @@ export function createRealtimeHub(wss: WebSocketServer): (payload: unknown) => v
 
       if (room.gameType === 'mahjong') {
         tickMahjongAutoTurn(hubContext, room, currentSeat, now);
-        scheduleActiveRoomsSnapshot();
+        if ((room.boardState?.actionSeq || 0) !== prevSeq || room.boardState?.phase !== prevPhase || (room.moveCount || 0) !== prevMoveCount) {
+          scheduleActiveRoomsSnapshot();
+        }
         continue;
       }
 
       tickYansanAutoTurn(hubContext, room, currentSeat, now);
-      scheduleActiveRoomsSnapshot();
+      if ((room.boardState?.actionSeq || 0) !== prevSeq || room.boardState?.phase !== prevPhase || (room.moveCount || 0) !== prevMoveCount) {
+        scheduleActiveRoomsSnapshot();
+      }
     }
   }, 1000);
 

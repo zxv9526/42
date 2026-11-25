@@ -454,8 +454,12 @@ type Hub struct {
 	sceneRooms map[string]*SceneWaitingRoom
 	challenges []ActiveChallengeRecord
 
-	snapshotMu    sync.Mutex
-	snapshotTimer *time.Timer
+	snapshotMu      sync.Mutex
+	snapshotWriteMu sync.Mutex
+	snapshotTimer   *time.Timer
+
+	teahouseTimerMu sync.Mutex
+	teahouseTimer   *time.Timer
 
 	stopCh   chan struct{}
 	bootTime time.Time
@@ -627,9 +631,20 @@ func (h *Hub) stop() {
 	}
 	h.snapshotMu.Unlock()
 
+	h.teahouseTimerMu.Lock()
+	if h.teahouseTimer != nil {
+		h.teahouseTimer.Stop()
+		h.teahouseTimer = nil
+	}
+	h.teahouseTimerMu.Unlock()
+
 	h.roomMu.Lock()
-	saveActiveRoomsSnapshot(h.rooms, h.sceneRooms)
+	rawSnap := buildActiveRoomsSnapshotBytes(h.rooms, h.sceneRooms)
 	h.roomMu.Unlock()
+
+	h.snapshotWriteMu.Lock()
+	writeActiveRoomsSnapshotBytes(rawSnap)
+	h.snapshotWriteMu.Unlock()
 }
 
 func (h *Hub) scheduleSnapshot() {
@@ -638,10 +653,13 @@ func (h *Hub) scheduleSnapshot() {
 	if h.snapshotTimer != nil {
 		h.snapshotTimer.Stop()
 	}
-	h.snapshotTimer = time.AfterFunc(500*time.Millisecond, func() {
+	h.snapshotTimer = time.AfterFunc(1500*time.Millisecond, func() {
 		h.roomMu.Lock()
-		saveActiveRoomsSnapshot(h.rooms, h.sceneRooms)
+		rawSnap := buildActiveRoomsSnapshotBytes(h.rooms, h.sceneRooms)
 		h.roomMu.Unlock()
+		h.snapshotWriteMu.Lock()
+		writeActiveRoomsSnapshotBytes(rawSnap)
+		h.snapshotWriteMu.Unlock()
 	})
 }
 
@@ -656,7 +674,7 @@ func (h *Hub) registerClient(c *WSConn) {
 	online := len(h.clients)
 	h.clientsMu.Unlock()
 
-	// Send initial lobby_snapshot & teahouse_players_update
+	// Send initial lobby_snapshot (already includes teahouse players list)
 	h.roomMu.Lock()
 	safeRooms := h.buildSanitizedRoomsListLocked()
 	h.roomMu.Unlock()
@@ -674,12 +692,6 @@ func (h *Hub) registerClient(c *WSConn) {
 		"counts":      counts,
 		"players":     teahousePlayers,
 		"serverTs":    nowMs(),
-	})
-	_ = c.WriteJSON(map[string]interface{}{
-		"type":        "teahouse_players_update",
-		"count":       len(teahousePlayers),
-		"onlineCount": countOnlineTeahouse(teahousePlayers),
-		"players":     teahousePlayers,
 	})
 
 	h.broadcastPresenceAndPlayers()
@@ -1537,15 +1549,30 @@ func (h *Hub) getRealGamePresence() RealPresenceCounts {
 }
 
 func (h *Hub) broadcastTeahousePlayers() {
-	var players []TeahousePlayerItem
-	h.storage.WithDBRead(func(db *DatabaseSchema) {
-		players = h.getAllPlayers(db.Profiles)
-	})
-	h.BroadcastJSON(map[string]interface{}{
-		"type":        "teahouse_players_update",
-		"count":       len(players),
-		"onlineCount": countOnlineTeahouse(players),
-		"players":     players,
+	h.teahouseTimerMu.Lock()
+	defer h.teahouseTimerMu.Unlock()
+	if h.teahouseTimer != nil {
+		return
+	}
+	h.teahouseTimer = time.AfterFunc(500*time.Millisecond, func() {
+		h.teahouseTimerMu.Lock()
+		h.teahouseTimer = nil
+		h.teahouseTimerMu.Unlock()
+		select {
+		case <-h.stopCh:
+			return
+		default:
+		}
+		var players []TeahousePlayerItem
+		h.storage.WithDBRead(func(db *DatabaseSchema) {
+			players = h.getAllPlayers(db.Profiles)
+		})
+		h.BroadcastJSON(map[string]interface{}{
+			"type":        "teahouse_players_update",
+			"count":       len(players),
+			"onlineCount": countOnlineTeahouse(players),
+			"players":     players,
+		})
 	})
 }
 
@@ -3172,16 +3199,37 @@ func (h *Hub) handleSceneLeave(client *WSConn, msg map[string]interface{}) {
 	h.broadcastPresenceAndPlayers()
 }
 
+func sanitizeVoiceURLGo(raw interface{}) *string {
+	s, ok := raw.(string)
+	if !ok {
+		return nil
+	}
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" || len(trimmed) > 300 {
+		return nil
+	}
+	if strings.HasPrefix(trimmed, "/api/voice/") {
+		return &trimmed
+	}
+	if (strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://")) && strings.Contains(trimmed, "/api/voice/") {
+		return &trimmed
+	}
+	return nil
+}
+
 func (h *Hub) handleSceneChat(client *WSConn, msg map[string]interface{}) {
 	if !client.allowChat() {
 		return
 	}
+	safeAudioURL := sanitizeVoiceURLGo(msg["audioUrl"])
 	var safeAudio interface{}
-	if a, ok := msg["audio"].(string); ok && len(a) > 0 && len(a) <= 450000 {
-		safeAudio = a
+	if safeAudioURL == nil {
+		if a, ok := msg["audio"].(string); ok && len(a) > 0 && len(a) <= 450000 {
+			safeAudio = a
+		}
 	}
 	safeText := sanitizeWsText(msg["text"], 300)
-	if safeText == "" && safeAudio == nil {
+	if safeText == "" && safeAudio == nil && safeAudioURL == nil {
 		return
 	}
 
@@ -3316,7 +3364,7 @@ func (h *Hub) handleSceneChat(client *WSConn, msg map[string]interface{}) {
 		displayText = "🎤 [等候室实时语音]"
 	}
 	phraseText := sanitizeWsText(msg["phraseText"], 200)
-	isVoice := jsonBool(msg, "voice", false) && (safeAudio != nil || phraseText != "")
+	isVoice := jsonBool(msg, "voice", false) && (safeAudio != nil || safeAudioURL != nil || phraseText != "")
 	pitch := 1.0
 	if p, ok := msg["pitch"].(float64); ok {
 		pitch = p
@@ -3330,6 +3378,11 @@ func (h *Hub) handleSceneChat(client *WSConn, msg map[string]interface{}) {
 		dur = 0
 	} else if dur > 30 {
 		dur = 30
+	}
+
+	var audioURLOut interface{}
+	if safeAudioURL != nil {
+		audioURLOut = *safeAudioURL
 	}
 
 	h.BroadcastJSON(map[string]interface{}{
@@ -3351,6 +3404,7 @@ func (h *Hub) handleSceneChat(client *WSConn, msg map[string]interface{}) {
 		"rate":             rate,
 		"isFemale":         jsonBool(msg, "isFemale", false),
 		"audio":            safeAudio,
+		"audioUrl":         audioURLOut,
 		"duration":         dur,
 		"action":           nullableStr(action),
 		"targetPlayerId":   msg["targetPlayerId"],
@@ -3971,15 +4025,18 @@ func (h *Hub) handleRoomChat(client *WSConn, msg map[string]interface{}) {
 	if targetRoomID == "" {
 		targetRoomID = "RM-202"
 	}
+	audioURLPtr := sanitizeVoiceURLGo(msg["audioUrl"])
 	var audioPtr *string
-	if a, ok := msg["audio"].(string); ok && len(a) > 0 && len(a) <= 450000 {
-		audioPtr = &a
+	if audioURLPtr == nil {
+		if a, ok := msg["audio"].(string); ok && len(a) > 0 && len(a) <= 450000 {
+			audioPtr = &a
+		}
 	}
 	safeText := sanitizeWsText(msg["text"], 120)
-	if safeText == "" && audioPtr == nil {
+	if safeText == "" && audioPtr == nil && audioURLPtr == nil {
 		return
 	}
-	if safeText == "" && audioPtr != nil {
+	if safeText == "" && (audioPtr != nil || audioURLPtr != nil) {
 		safeText = "🎤 [牌桌实时语音]"
 	}
 	sender := sanitizeWsText(msg["sender"], 24)
@@ -4018,8 +4075,9 @@ func (h *Hub) handleRoomChat(client *WSConn, msg map[string]interface{}) {
 		Text:       safeText,
 		Prop:       propPtr,
 		TargetSeat: targetSeatPtr,
-		Voice:      jsonBool(msg, "voice", false) && audioPtr != nil,
+		Voice:      jsonBool(msg, "voice", false) && (audioPtr != nil || audioURLPtr != nil),
 		Audio:      audioPtr,
+		AudioURL:   audioURLPtr,
 		Duration:   dur,
 		Timestamp:  time.Now().Format("15:04"),
 	}

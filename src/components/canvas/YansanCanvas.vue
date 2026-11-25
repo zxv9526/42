@@ -1589,7 +1589,12 @@ function clearLocalSnapshot() {
   } catch {}
 }
 
-function saveLocalSnapshot() {
+let saveSnapshotTimer: ReturnType<typeof setTimeout> | null = null;
+function saveLocalSnapshotNow() {
+  if (saveSnapshotTimer) {
+    clearTimeout(saveSnapshotTimer);
+    saveSnapshotTimer = null;
+  }
   if (props.isPracticeMode) return;
   const roomId = props.roomId;
   if (!roomId) return;
@@ -1622,6 +1627,15 @@ function saveLocalSnapshot() {
     localStorage.setItem(`yansan_table_snapshot_${roomId}`, serialized);
     localStorage.setItem('yansan_table_snapshot_latest', serialized);
   } catch {}
+}
+
+function saveLocalSnapshot() {
+  if (props.isPracticeMode) return;
+  if (saveSnapshotTimer) clearTimeout(saveSnapshotTimer);
+  saveSnapshotTimer = setTimeout(() => {
+    saveSnapshotTimer = null;
+    saveLocalSnapshotNow();
+  }, 350);
 }
 
 function tryRestoreLocalSnapshot(): boolean {
@@ -2037,6 +2051,7 @@ function dealNewMatch() {
 }
 
 function handleLeaveToLobby() {
+  saveLocalSnapshotNow();
   if (props.ws && props.ws.readyState === WebSocket.OPEN && !props.isPracticeMode) {
     try {
       props.ws.send(
@@ -2115,6 +2130,7 @@ function checkGameFinishAfterPlay(seat: number, isRemote: boolean = false) {
 
   if (!props.isPracticeMode && !isAllOtherPlayersBots.value && props.ws && props.ws.readyState === WebSocket.OPEN) {
     // 多人联机房对手牌面脱敏，严禁客户端依据未亮出的 ♠3/♠A 猜测终局或自行结算，交由服务端权威下发 finish 结算
+    saveLocalSnapshotNow();
     return;
   }
 
@@ -4890,6 +4906,11 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (saveSnapshotTimer) {
+    clearTimeout(saveSnapshotTimer);
+    saveSnapshotTimer = null;
+    saveLocalSnapshotNow();
+  }
   if (cleanupCardLoader) cleanupCardLoader();
   if (props.ws) {
     try {

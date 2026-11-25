@@ -999,6 +999,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { UserProfile } from '../utils/storage';
 import { soundFX } from '../utils/sound';
+import { uploadVoiceBlob, resolveVoicePlayUrl } from '../utils/voiceUpload';
 
 export interface ScenePlayer {
   id: string;
@@ -1874,12 +1875,11 @@ function stopAndSendVoiceRecording() {
       if (voiceChunks.length === 0) return;
       const audioBlob = new Blob(voiceChunks, { type: voiceRecorder?.mimeType || 'audio/webm' });
       voiceChunks = [];
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64Data = reader.result as string;
-        sendVoiceBroadcastMessage(base64Data, duration);
-      };
-      reader.readAsDataURL(audioBlob);
+      void uploadVoiceBlob(audioBlob).then((uploaded) => {
+        if (uploaded.audioUrl || uploaded.audio) {
+          sendVoiceBroadcastMessage(uploaded, duration);
+        }
+      });
     } catch {}
     voiceRecorder = null;
   };
@@ -1899,8 +1899,9 @@ function cancelVoiceRecording() {
   if (soundPromptEnabled.value) soundFX.playTap();
 }
 
-function sendVoiceBroadcastMessage(audioDataUrl: string, duration: number) {
+function sendVoiceBroadcastMessage(voicePayload: { audioUrl?: string; audio?: string }, duration: number) {
   const ts = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  const localRef = voicePayload.audioUrl || voicePayload.audio;
   const msgItem: ChatMessageItem = {
     id: `m-${Date.now()}-${Math.random()}`,
     sender: props.currentUser.name || '牌友',
@@ -1910,7 +1911,7 @@ function sendVoiceBroadcastMessage(audioDataUrl: string, duration: number) {
     timestamp: ts,
     isSelf: true,
     voice: true,
-    audio: audioDataUrl,
+    audio: localRef,
     duration,
     channel: currentChannel.value === 'scene' ? 'scene' : 'hall',
     gameType: props.activeGameType,
@@ -1933,7 +1934,8 @@ function sendVoiceBroadcastMessage(audioDataUrl: string, duration: number) {
         avatar: props.currentUser.avatar || '👑',
         text: `🎤 [大堂语音广播 ${duration}s]`,
         voice: true,
-        audio: audioDataUrl,
+        audioUrl: voicePayload.audioUrl,
+        audio: voicePayload.audio,
         duration,
       }));
     } catch {}
@@ -1941,7 +1943,8 @@ function sendVoiceBroadcastMessage(audioDataUrl: string, duration: number) {
 }
 
 function playVoiceMessage(m: ChatMessageItem) {
-  if (!m.audio) return;
+  const resolved = resolveVoicePlayUrl(m.audio);
+  if (!resolved) return;
   if (activePlayingAudioMessageId.value === m.id) {
     if (activePlayingAudio) {
       activePlayingAudio.pause();
@@ -1951,7 +1954,7 @@ function playVoiceMessage(m: ChatMessageItem) {
     activePlayingVoice.value = null;
     return;
   }
-  playVoiceBroadcast(m.audio, m.sender, m.duration || 2, m.id);
+  playVoiceBroadcast(resolved, m.sender, m.duration || 2, m.id);
 }
 
 function playVoiceBroadcast(audioUrl: string, sender: string, duration = 2, messageId?: string) {
@@ -2077,9 +2080,10 @@ function handleWsMessage(event: MessageEvent) {
     } else if (msg.type === 'scene_chat_broadcast') {
       const isMyOwnMessage = (msg.senderId && msg.senderId === props.currentUser.id) ||
                             (msg.sender && msg.sender === props.currentUser.name);
+      const voiceSrc = resolveVoicePlayUrl(msg.audioUrl || msg.audio);
       
-      if (msg.audio && !isMyOwnMessage && autoPlayVoice.value) {
-        playVoiceBroadcast(msg.audio, msg.sender, msg.duration || 1);
+      if (voiceSrc && !isMyOwnMessage && autoPlayVoice.value) {
+        playVoiceBroadcast(voiceSrc, msg.sender, msg.duration || 1);
         if (soundPromptEnabled.value) soundFX.playTap();
       }
 
@@ -2090,12 +2094,12 @@ function handleWsMessage(event: MessageEvent) {
           sender: msg.sender || '牌友',
           senderId: msg.senderId || undefined,
           avatar: msg.avatar || '👑',
-          text: msg.text || (msg.audio ? '🎙️ [大堂语音]' : '...'),
+          text: msg.text || (voiceSrc ? '🎙️ [大堂语音]' : '...'),
           timestamp: ts,
           isSelf: false,
           channel: msg.channel || 'hall',
-          voice: !!msg.audio,
-          audio: msg.audio || undefined,
+          voice: Boolean(voiceSrc),
+          audio: (msg.audioUrl || msg.audio) || undefined,
           duration: msg.duration || undefined,
           action: msg.action || null,
           targetPlayerName: msg.targetPlayerName || undefined,
@@ -2109,7 +2113,7 @@ function handleWsMessage(event: MessageEvent) {
         pushChatMessage(newMsg);
 
         // Sound effect on receiving message
-        if (soundPromptEnabled.value && !msg.audio) {
+        if (soundPromptEnabled.value && !voiceSrc) {
           if (msg.action === 'tea') soundFX.playClink();
           else if (msg.action === 'challenge') soundFX.playVictory();
           else soundFX.playTap();

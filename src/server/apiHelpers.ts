@@ -283,10 +283,15 @@ export function sendHtml(res: any, status: number, html: string) {
   }
 }
 
-export function broadcastTeahousePlayersRoster(broadcast?: Function, db?: any): void {
-  if (typeof broadcast === 'function') {
+let teahouseRosterTimer: NodeJS.Timeout | null = null;
+
+export function broadcastTeahousePlayersRoster(broadcast?: Function, _db?: any): void {
+  if (typeof broadcast !== 'function') return;
+  if (teahouseRosterTimer) return;
+  teahouseRosterTimer = setTimeout(() => {
+    teahouseRosterTimer = null;
     try {
-      const database = db || loadDatabase();
+      const database = loadDatabase();
       const freshPlayers = presenceTracker.getAllPlayers(database.profiles || {});
       broadcast({
         type: 'teahouse_players_update',
@@ -295,7 +300,7 @@ export function broadcastTeahousePlayersRoster(broadcast?: Function, db?: any): 
         players: freshPlayers,
       });
     } catch {}
-  }
+  }, 300);
 }
 
 export function sanitizeProfileForClient(profile: any) {

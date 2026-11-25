@@ -30,7 +30,70 @@ var (
 	ttsStripRe      = regexp.MustCompile(`[^\p{Han}a-zA-Z0-9，。！、？]`)
 	ttsDanLeadRe    = regexp.MustCompile(`^单([0-9一二三四五六七八九十勾圈老K尖A-Z])`)
 	gitRepoRe       = regexp.MustCompile(`github\.com[:/]([^\s/]+/[^\s/.]+)`)
+	voiceDataURLRe  = regexp.MustCompile(`^data:(audio/[a-zA-Z0-9.+-]+)(?:;[a-zA-Z0-9.=_-]+)*;base64,([A-Za-z0-9+/=]+)$`)
 )
+
+const (
+	voiceClipTTL      = 15 * time.Minute
+	voiceClipMaxItems = 120
+	voiceClipMaxBytes = 650000
+)
+
+type voiceClipEntry struct {
+	mime      string
+	data      []byte
+	createdAt time.Time
+}
+
+type voiceClipStore struct {
+	mu    sync.RWMutex
+	order []string
+	items map[string]voiceClipEntry
+}
+
+func newVoiceClipStore() *voiceClipStore {
+	return &voiceClipStore{
+		items: make(map[string]voiceClipEntry),
+	}
+}
+
+func (vc *voiceClipStore) set(id, mime string, data []byte) {
+	vc.mu.Lock()
+	defer vc.mu.Unlock()
+	now := time.Now()
+	kept := vc.order[:0]
+	for _, k := range vc.order {
+		if entry, ok := vc.items[k]; ok && now.Sub(entry.createdAt) <= voiceClipTTL {
+			kept = append(kept, k)
+		} else {
+			delete(vc.items, k)
+		}
+	}
+	vc.order = kept
+	for len(vc.order) >= voiceClipMaxItems {
+		oldest := vc.order[0]
+		vc.order = vc.order[1:]
+		delete(vc.items, oldest)
+	}
+	vc.order = append(vc.order, id)
+	vc.items[id] = voiceClipEntry{mime: mime, data: data, createdAt: now}
+}
+
+func (vc *voiceClipStore) get(id string) (voiceClipEntry, bool) {
+	vc.mu.RLock()
+	entry, ok := vc.items[id]
+	vc.mu.RUnlock()
+	if !ok {
+		return voiceClipEntry{}, false
+	}
+	if time.Since(entry.createdAt) > voiceClipTTL {
+		vc.mu.Lock()
+		delete(vc.items, id)
+		vc.mu.Unlock()
+		return voiceClipEntry{}, false
+	}
+	return entry, true
+}
 
 type ttsCacheStore struct {
 	mu    sync.Mutex
@@ -1653,6 +1716,67 @@ func setupRoutes(h *Hub, tm *TelegramManager) http.Handler {
 		sendJSON(w, status, respBody)
 	})
 
+	voiceStore := newVoiceClipStore()
+
+	mux.HandleFunc("/api/voice/upload", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		body, err := parseRequestJSON(r)
+		if err != nil {
+			sendJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "Invalid JSON"})
+			return
+		}
+		rawAudio := strings.TrimSpace(jsonString(body, "audio"))
+		m := voiceDataURLRe.FindStringSubmatch(rawAudio)
+		if len(m) != 3 {
+			sendJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "无效的语音音频格式"})
+			return
+		}
+		decoded, err := base64.StdEncoding.DecodeString(m[2])
+		if err != nil || len(decoded) == 0 || len(decoded) > voiceClipMaxBytes {
+			sendJSON(w, http.StatusRequestEntityTooLarge, map[string]interface{}{"success": false, "error": "语音文件过大或为空"})
+			return
+		}
+		voiceID := fmt.Sprintf("v_%d_%s", nowMs(), randomHex(4))
+		voiceStore.set(voiceID, m[1], decoded)
+		sendJSON(w, http.StatusOK, map[string]interface{}{
+			"success":  true,
+			"voiceId":  voiceID,
+			"voiceUrl": "/api/voice/" + voiceID,
+		})
+	})
+
+	mux.HandleFunc("/api/voice/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		rawID := strings.TrimPrefix(r.URL.Path, "/api/voice/")
+		var cleanB strings.Builder
+		for _, ch := range rawID {
+			if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' {
+				cleanB.WriteRune(ch)
+			}
+		}
+		voiceID := cleanB.String()
+		if voiceID == "" {
+			sendJSON(w, http.StatusNotFound, map[string]interface{}{"success": false, "error": "语音已过期或不存在"})
+			return
+		}
+		entry, ok := voiceStore.get(voiceID)
+		if !ok {
+			sendJSON(w, http.StatusNotFound, map[string]interface{}{"success": false, "error": "语音已过期或不存在"})
+			return
+		}
+		w.Header().Set("Content-Type", entry.mime)
+		w.Header().Set("Cache-Control", "public, max-age=900")
+		w.Header().Set("Content-Length", strconv.Itoa(len(entry.data)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(entry.data)
+	})
+
 	mux.HandleFunc("/api/teahouse/players", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -1676,10 +1800,23 @@ func setupRoutes(h *Hub, tm *TelegramManager) http.Handler {
 			return
 		}
 		counts := h.getRealGamePresence()
-		var players []TeahousePlayerItem
-		h.storage.WithDBRead(func(db *DatabaseSchema) {
-			players = h.getAllPlayers(db.Profiles)
-		})
+		if r.URL.Query().Get("includePlayers") == "1" {
+			var players []TeahousePlayerItem
+			h.storage.WithDBRead(func(db *DatabaseSchema) {
+				players = h.getAllPlayers(db.Profiles)
+			})
+			sendJSON(w, http.StatusOK, map[string]interface{}{
+				"success":           true,
+				"yansan":            counts.Yansan,
+				"shisanshui":        counts.Shisanshui,
+				"mahjong":           counts.Mahjong,
+				"totalOnline":       counts.TotalOnline,
+				"sceneWaitingStats": counts.SceneWaitingStats,
+				"playersCount":      len(players),
+				"players":           players,
+			})
+			return
+		}
 		sendJSON(w, http.StatusOK, map[string]interface{}{
 			"success":           true,
 			"yansan":            counts.Yansan,
@@ -1687,8 +1824,6 @@ func setupRoutes(h *Hub, tm *TelegramManager) http.Handler {
 			"mahjong":           counts.Mahjong,
 			"totalOnline":       counts.TotalOnline,
 			"sceneWaitingStats": counts.SceneWaitingStats,
-			"playersCount":      len(players),
-			"players":           players,
 		})
 	})
 

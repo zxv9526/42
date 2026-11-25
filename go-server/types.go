@@ -230,6 +230,7 @@ type RoomChatMessage struct {
 	TargetSeat *int    `json:"targetSeat,omitempty"`
 	Voice      bool    `json:"voice,omitempty"`
 	Audio      *string `json:"audio,omitempty"`
+	AudioURL   *string `json:"audioUrl,omitempty"`
 	Duration   int     `json:"duration,omitempty"`
 	Timestamp  string  `json:"timestamp"`
 }

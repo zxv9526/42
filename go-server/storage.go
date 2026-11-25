@@ -24,13 +24,18 @@ const (
 )
 
 type StorageManager struct {
-	mu     sync.Mutex
-	envMap map[string]string
+	mu        sync.Mutex
+	writeMu   sync.Mutex
+	envMap    map[string]string
+	cachedDB  *DatabaseSchema
+	dirty     bool
+	saveTimer *time.Timer
 }
 
 func newStorageManager() *StorageManager {
 	sm := &StorageManager{envMap: map[string]string{}}
 	sm.loadEnvFile()
+	sm.cachedDB = sm.loadDBLocked()
 	return sm
 }
 
@@ -260,49 +265,89 @@ func ensureDBIntegrity(db *DatabaseSchema) {
 	}
 }
 
-func (s *StorageManager) saveDBLocked(db *DatabaseSchema) error {
-	ensureDBIntegrity(db)
-	if len(db.Records) > maxRecordsKeep {
-		db.Records = db.Records[:maxRecordsKeep]
+func (s *StorageManager) getOrLoadDBLocked() *DatabaseSchema {
+	if s.cachedDB == nil {
+		s.cachedDB = s.loadDBLocked()
 	}
-	if len(db.SystemAnnouncements) > maxAnnKeep {
-		db.SystemAnnouncements = db.SystemAnnouncements[:maxAnnKeep]
+	return s.cachedDB
+}
+
+func (s *StorageManager) scheduleSaveLocked() {
+	s.dirty = true
+	if s.saveTimer != nil {
+		s.saveTimer.Stop()
 	}
-	if len(db.AdminLogs) > 300 {
-		db.AdminLogs = db.AdminLogs[:300]
+	s.saveTimer = time.AfterFunc(600*time.Millisecond, func() {
+		_ = s.FlushSync()
+	})
+}
+
+func (s *StorageManager) FlushSync() error {
+	s.mu.Lock()
+	if s.saveTimer != nil {
+		s.saveTimer.Stop()
+		s.saveTimer = nil
 	}
-	if err := os.MkdirAll(filepath.Dir(dbFilePath), 0755); err != nil {
+	if !s.dirty || s.cachedDB == nil {
+		s.mu.Unlock()
+		return nil
+	}
+	ensureDBIntegrity(s.cachedDB)
+	if len(s.cachedDB.Records) > maxRecordsKeep {
+		s.cachedDB.Records = s.cachedDB.Records[:maxRecordsKeep]
+	}
+	if len(s.cachedDB.SystemAnnouncements) > maxAnnKeep {
+		s.cachedDB.SystemAnnouncements = s.cachedDB.SystemAnnouncements[:maxAnnKeep]
+	}
+	if len(s.cachedDB.AdminLogs) > 300 {
+		s.cachedDB.AdminLogs = s.cachedDB.AdminLogs[:300]
+	}
+	data, err := json.Marshal(s.cachedDB)
+	if err != nil {
+		s.mu.Unlock()
 		return err
 	}
-	if _, err := os.Stat(dbFilePath); err == nil {
-		if old, rErr := os.ReadFile(dbFilePath); rErr == nil {
-			_ = os.WriteFile(dbFilePath+".bak", old, 0644)
-		}
-	}
-	data, err := json.MarshalIndent(db, "", "  ")
-	if err != nil {
+	s.dirty = false
+	s.mu.Unlock()
+
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	if err := os.MkdirAll(filepath.Dir(dbFilePath), 0755); err != nil {
+		s.mu.Lock()
+		s.dirty = true
+		s.mu.Unlock()
 		return err
 	}
 	tmp := dbFilePath + ".tmp." + randomHex(4)
 	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		s.mu.Lock()
+		s.dirty = true
+		s.mu.Unlock()
 		return err
 	}
-	return os.Rename(tmp, dbFilePath)
+	if err := os.Rename(tmp, dbFilePath); err != nil {
+		_ = os.Remove(tmp)
+		s.mu.Lock()
+		s.dirty = true
+		s.mu.Unlock()
+		return err
+	}
+	return nil
 }
 
 func (s *StorageManager) WithDBRead(fn func(db *DatabaseSchema)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	db := s.loadDBLocked()
+	db := s.getOrLoadDBLocked()
 	fn(db)
 }
 
 func (s *StorageManager) WithDBWrite(fn func(db *DatabaseSchema) bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	db := s.loadDBLocked()
+	db := s.getOrLoadDBLocked()
 	if fn(db) {
-		return s.saveDBLocked(db)
+		s.scheduleSaveLocked()
 	}
 	return nil
 }
@@ -541,9 +586,9 @@ type activeRoomsSnapshotFile struct {
 	RoomPairs []activeRoomSnapshotEntry `json:"roomPairs"`
 }
 
-func saveActiveRoomsSnapshot(rooms map[string]*RoomState, sceneRooms map[string]*SceneWaitingRoom) {
+func buildActiveRoomsSnapshotBytes(rooms map[string]*RoomState, sceneRooms map[string]*SceneWaitingRoom) []byte {
 	if os.Getenv("DISABLE_ACTIVE_ROOM_SNAPSHOT") == "1" {
-		return
+		return nil
 	}
 	seen := map[string]bool{}
 	entries := []activeRoomSnapshotEntry{}
@@ -563,6 +608,14 @@ func saveActiveRoomsSnapshot(rooms map[string]*RoomState, sceneRooms map[string]
 		if ar != nil {
 			tmp := *ar
 			tmp.Deal = nil
+			if len(tmp.Chat) > 0 {
+				cleanChat := make([]RoomChatMessage, len(tmp.Chat))
+				for i, c := range tmp.Chat {
+					c.Audio = nil
+					cleanChat[i] = c
+				}
+				tmp.Chat = cleanChat
+			}
 			arCopy = &tmp
 		}
 		entries = append(entries, activeRoomSnapshotEntry{
@@ -580,6 +633,14 @@ func saveActiveRoomsSnapshot(rooms map[string]*RoomState, sceneRooms map[string]
 		}
 		tmp := *ar
 		tmp.Deal = nil
+		if len(tmp.Chat) > 0 {
+			cleanChat := make([]RoomChatMessage, len(tmp.Chat))
+			for i, c := range tmp.Chat {
+				c.Audio = nil
+				cleanChat[i] = c
+			}
+			tmp.Chat = cleanChat
+		}
 		entries = append(entries, activeRoomSnapshotEntry{
 			AuthRoom: &tmp,
 			Deal:     ar.Deal,
@@ -590,13 +651,29 @@ func saveActiveRoomsSnapshot(rooms map[string]*RoomState, sceneRooms map[string]
 		SavedAt:   nowMs(),
 		RoomPairs: entries,
 	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil
+	}
+	return raw
+}
+
+func writeActiveRoomsSnapshotBytes(raw []byte) {
+	if len(raw) == 0 || os.Getenv("DISABLE_ACTIVE_ROOM_SNAPSHOT") == "1" {
+		return
+	}
 	_ = os.MkdirAll(filepath.Dir(snapshotFilePath), 0755)
-	if raw, err := json.Marshal(payload); err == nil {
-		tmp := snapshotFilePath + ".tmp." + randomHex(3)
-		if os.WriteFile(tmp, raw, 0644) == nil {
-			_ = os.Rename(tmp, snapshotFilePath)
+	tmp := snapshotFilePath + ".tmp." + randomHex(3)
+	if os.WriteFile(tmp, raw, 0644) == nil {
+		if os.Rename(tmp, snapshotFilePath) != nil {
+			_ = os.Remove(tmp)
 		}
 	}
+}
+
+func saveActiveRoomsSnapshot(rooms map[string]*RoomState, sceneRooms map[string]*SceneWaitingRoom) {
+	raw := buildActiveRoomsSnapshotBytes(rooms, sceneRooms)
+	writeActiveRoomsSnapshotBytes(raw)
 }
 
 func loadActiveRoomsSnapshot(rooms map[string]*RoomState, sceneRooms map[string]*SceneWaitingRoom) int {

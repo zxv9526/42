@@ -2076,7 +2076,12 @@ function clearLocalSnapshot() {
   } catch {}
 }
 
-function saveLocalSnapshot() {
+let saveSnapshotTimer: ReturnType<typeof setTimeout> | null = null;
+function saveLocalSnapshotNow() {
+  if (saveSnapshotTimer) {
+    clearTimeout(saveSnapshotTimer);
+    saveSnapshotTimer = null;
+  }
   if (props.isPracticeMode || isBookingScene.value) return;
   const roomId = props.roomId;
   if (!roomId) return;
@@ -2102,6 +2107,15 @@ function saveLocalSnapshot() {
     localStorage.setItem(`shisanshui_table_snapshot_${roomId}`, serialized);
     localStorage.setItem('shisanshui_table_snapshot_latest', serialized);
   } catch {}
+}
+
+function saveLocalSnapshot() {
+  if (props.isPracticeMode || isBookingScene.value) return;
+  if (saveSnapshotTimer) clearTimeout(saveSnapshotTimer);
+  saveSnapshotTimer = setTimeout(() => {
+    saveSnapshotTimer = null;
+    saveLocalSnapshotNow();
+  }, 350);
 }
 
 function tryRestoreLocalSnapshot(): boolean {
@@ -2388,6 +2402,7 @@ function dealNewMatch(forceReApply = false, overrideDeal?: any) {
 }
 
 function handleLeaveToLobby() {
+  saveLocalSnapshotNow();
   if (props.ws && props.ws.readyState === WebSocket.OPEN && !props.isPracticeMode) {
     try {
       props.ws.send(
@@ -3416,6 +3431,7 @@ function handleCompare() {
   // 纯真人联机：向服务器广播自己已理好手牌并确认开牌比水
   isWaitingShowdown.value = true;
   submittedSeats.value.add(mySeat.value);
+  saveLocalSnapshotNow();
   soundFX.playTap();
   haptics.selection();
 
@@ -3776,6 +3792,11 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (saveSnapshotTimer) {
+    clearTimeout(saveSnapshotTimer);
+    saveSnapshotTimer = null;
+    saveLocalSnapshotNow();
+  }
   if (cleanupCardLoader) cleanupCardLoader();
   if (bookingSyncSafetyTimer) clearTimeout(bookingSyncSafetyTimer);
   if (bookingTimer) clearInterval(bookingTimer);
