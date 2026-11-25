@@ -318,20 +318,20 @@
         v-if="hasCompared"
         class="absolute inset-0 backdrop-blur-md flex flex-col p-2 sm:p-3 z-40 overflow-hidden select-none"
         :style="{
-          backgroundColor: props.tableTheme?.feltColor || '#1D4ED8',
-          background: `radial-gradient(ellipse at 50% 45%, ${props.tableTheme?.highlightColor || '#3B82F6'}dd 0%, ${props.tableTheme?.feltColor || '#1D4ED8'}f2 60%, ${props.tableTheme?.edgeColor || '#1E3A8A'}fb 100%)`
+          backgroundColor: props.tableTheme?.feltColor || '#E0D0B0',
+          background: `radial-gradient(ellipse at 50% 35%, ${props.tableTheme?.highlightColor || '#F8F0E2'}f5 0%, ${props.tableTheme?.feltColor || '#E0D0B0'}f8 62%, ${props.tableTheme?.edgeColor || '#C8B898'}fc 100%)`
         }"
       >
         <!-- 顶部控制与结算横幅 -->
-        <div class="h-11 shrink-0 flex items-center justify-between border-b border-white/10 px-2 pb-1.5 gap-2">
+        <div class="h-11 shrink-0 flex items-center justify-between border-b border-[#8C7355]/25 px-2 pb-1.5 gap-2">
           <!-- 左侧：标题与场次标识 -->
           <div class="flex items-center gap-2 shrink-0">
-            <h3 class="text-xs sm:text-sm font-black text-amber-100 font-serif-title flex items-center gap-1.5">
+            <h3 class="text-xs sm:text-sm font-black text-[#2C1E12] font-serif-title flex items-center gap-1.5">
               <span>⚔️</span>
               <span>比水总谱</span>
-              <span class="text-[10px] text-amber-200/80 font-sans font-medium hidden sm:inline">(田字全景对决)</span>
+              <span class="text-[10px] text-[#6E5942] font-sans font-medium hidden sm:inline">(田字全景对决)</span>
             </h3>
-            <span class="text-[10px] px-2 py-0.5 rounded-full bg-red-950/50 text-red-400 border border-red-500/50 font-mono font-bold">
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-[#D4C2A3]/75 text-[#4A3623] border border-[#A68E6B]/60 font-mono font-bold">
               {{ isEightPlayer ? (showdownPage === 0 ? '八人场 · 第 1/2 页 (前四席)' : '八人场 · 第 2/2 页 (后四席)') : '四人场 · 四席田字全景' }}
             </span>
           </div>
@@ -339,35 +339,35 @@
           <!-- 中间：总净水与战报 -->
           <div class="flex items-center gap-2 sm:gap-3 shrink-0">
             <div class="flex items-center gap-1.5">
-              <span class="text-[10px] text-[#A89887] hidden sm:inline">本局总净水:</span>
+              <span class="text-[10px] text-[#6E5942] hidden sm:inline">本局总净水:</span>
               <span
-                class="text-sm sm:text-base font-black font-mono tracking-tight"
-                :class="totalScore >= 0 ? 'text-emerald-300' : 'text-red-300'"
+                class="text-sm sm:text-base font-black font-mono tracking-tight tabular-nums"
+                :class="totalScore >= 0 ? 'text-[#0F6E4A]' : 'text-[#A62828]'"
               >
                 {{ totalScore >= 0 ? `+${totalScore}` : totalScore }}
-                <span class="text-[10px] text-amber-200 font-sans font-bold">水</span>
+                <span class="text-[10px] text-[#4A3623] font-sans font-bold">水</span>
               </span>
               <span
-                class="text-xs font-mono font-bold ml-1"
-                :class="totalScore >= 0 ? 'text-amber-300' : 'text-red-300'"
+                class="text-xs font-mono font-bold ml-1 tabular-nums"
+                :class="totalScore >= 0 ? 'text-[#8B5A12]' : 'text-[#A62828]'"
               >
                 🪙 {{ totalScore * 50 >= 0 ? `+${totalScore * 50}` : `${totalScore * 50}` }} 分
               </span>
             </div>
 
-            <span v-if="isGrandSlam" class="text-[10px] px-2 py-0.5 rounded-full bg-amber-400 text-black border border-amber-500 font-bold animate-pulse shrink-0 hidden md:inline">
+            <span v-if="isGrandSlam" class="text-[10px] px-2 py-0.5 rounded-full bg-[#B8822E]/18 text-[#6B420B] border border-[#A87222]/50 font-bold shrink-0 hidden md:inline">
               🔥 全垒打 (翻倍)
             </span>
           </div>
 
-          <!-- 右侧：八人场翻页按钮、退出与继续游戏 (已移除战绩海报按钮) -->
+          <!-- 右侧：八人场翻页按钮、退出与继续游戏 -->
           <div class="flex items-center gap-1.5 shrink-0">
             <!-- 八人场翻页按钮 -->
             <button
               v-if="isEightPlayer"
               type="button"
               @click="showdownPage = showdownPage === 0 ? 1 : 0"
-              class="px-2.5 py-1 text-xs font-bold rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white border border-blue-400 shadow-md flex items-center gap-1 cursor-pointer active:scale-95 transition-all"
+              class="px-2.5 py-1 text-xs font-bold rounded-lg bg-[#EFE4CE] hover:bg-[#E5D6B8] text-[#3A2919] border border-[#9E8462]/60 shadow-sm flex items-center gap-1 cursor-pointer active:scale-95 transition-all"
             >
               <span>📄</span>
               <span>{{ showdownPage === 0 ? '翻页后四席 (1/2 →)' : '翻页前四席 (← 2/2)' }}</span>
@@ -376,7 +376,7 @@
             <button
               type="button"
               @click="handleLeaveToLobby"
-              class="px-2.5 py-1 text-xs font-bold rounded-lg bg-[#26201B] hover:bg-red-950/80 text-[#D6C7B2] hover:text-red-300 border border-white/15 transition-all active:scale-95 cursor-pointer"
+              class="px-2.5 py-1 text-xs font-bold rounded-lg bg-[#E8DAC0] hover:bg-[#F3DFDC] text-[#4A3623] hover:text-[#9E2222] border border-[#9E8462]/55 transition-all active:scale-95 cursor-pointer"
               title="结束游戏返回大厅"
             >
               <span>🚪 结束游戏返回大厅</span>
@@ -387,7 +387,7 @@
               @click="onRestartGame"
               :disabled="hasClickedReady"
               class="px-3 py-1 text-xs font-extrabold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-              :class="hasClickedReady ? 'bg-stone-800 text-amber-300 border border-amber-500/40 cursor-not-allowed opacity-90' : 'bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white shadow-md ring-1 ring-amber-400 active:scale-95'"
+              :class="hasClickedReady ? 'bg-[#E5D6B8] text-[#7A5016] border border-[#B8822E]/45 cursor-not-allowed opacity-90' : 'bg-gradient-to-r from-[#B87D28] to-[#CE953C] hover:from-[#A66F20] hover:to-[#BF8630] text-[#FFFDF8] shadow-md ring-1 ring-[#8C5A14]/40 active:scale-95'"
             >
               <span>{{ hasClickedReady ? `✅ 已准备 · 等待牌友 (${readyPlayersCount}/${totalSeatsCount})...` : '⚡ 继续下一局' }}</span>
             </button>
@@ -397,13 +397,13 @@
         <!-- 8人场处于第2页时的本家信息小横幅 (方便玩家对照自己的牌) -->
         <div
           v-if="isEightPlayer && showdownPage === 1"
-          class="shrink-0 px-2.5 py-1 my-1 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-[11px]"
+          class="shrink-0 px-2.5 py-1 my-1 rounded-lg bg-[#EFE4CE]/90 border border-[#B8822E]/45 flex items-center justify-between text-[11px]"
         >
-          <span class="font-bold text-amber-300 flex items-center gap-1">
+          <span class="font-bold text-[#7C4A12] flex items-center gap-1">
             <span>👑 本家手牌提示:</span>
-            <span class="text-white font-normal font-mono">头道 [{{ frontTierLabel }}] · 中道 [{{ midTierLabel }}] · 尾道 [{{ backTierLabel }}]</span>
+            <span class="text-[#2E2115] font-normal font-mono">头道 [{{ frontTierLabel }}] · 中道 [{{ midTierLabel }}] · 尾道 [{{ backTierLabel }}]</span>
           </span>
-          <span class="font-mono font-bold text-amber-200">总分: {{ totalScore >= 0 ? `+${totalScore}` : totalScore }} 水</span>
+          <span class="font-mono font-bold text-[#3A2919] tabular-nums">总分: {{ totalScore >= 0 ? `+${totalScore}` : totalScore }} 水</span>
         </div>
 
         <!-- 田字型四格对决核心区 (2列 × 2行) -->
@@ -411,40 +411,40 @@
           <div
             v-for="p in displayedShowdownPlayers"
             :key="p.seat"
-            class="relative h-full min-h-0 flex flex-col rounded-xl border p-2 sm:p-2.5 overflow-hidden shadow-lg transition-all"
-            :class="p.isMe ? 'border-amber-500/70 ring-1 ring-amber-400/50 shadow-[0_0_20px_rgba(245,158,11,0.25)]' : 'border-white/20 hover:border-white/40'"
+            class="relative h-full min-h-0 flex flex-col rounded-xl border p-2 sm:p-2.5 overflow-hidden shadow-md transition-all"
+            :class="p.isMe ? 'border-[#A87222]/75 ring-1 ring-[#B8822E]/40 shadow-[0_4px_18px_rgba(72,54,36,0.16)]' : 'border-[#8C7355]/35 hover:border-[#8C7355]/60'"
             :style="{
               background: p.isMe
-                ? `linear-gradient(135deg, ${props.tableTheme?.highlightColor || '#3B82F6'}50 0%, ${props.tableTheme?.feltColor || '#1D4ED8'}f2 100%)`
-                : `linear-gradient(135deg, ${props.tableTheme?.edgeColor || '#1E3A8A'}cc 0%, ${props.tableTheme?.feltColor || '#1D4ED8'}cc 100%)`,
-              borderColor: p.isMe ? '#F59E0B' : `${props.tableTheme?.highlightColor || '#3B82F6'}66`
+                ? 'linear-gradient(155deg, rgba(252, 248, 238, 0.96) 0%, rgba(239, 227, 204, 0.95) 100%)'
+                : 'linear-gradient(155deg, rgba(246, 239, 224, 0.90) 0%, rgba(229, 214, 188, 0.92) 100%)',
+              borderColor: p.isMe ? 'rgba(168, 114, 34, 0.72)' : 'rgba(140, 115, 85, 0.38)'
             }"
           >
             <!-- 席位玩家标头 -->
-            <div class="flex items-center justify-between pb-1 mb-1 border-b border-white/10 shrink-0 text-xs">
+            <div class="flex items-center justify-between pb-1 mb-1 border-b border-[#8C7355]/20 shrink-0 text-xs">
               <div class="flex items-center gap-1.5 truncate">
                 <span class="text-sm shrink-0">{{ p.avatar }}</span>
-                <span :class="p.isMe ? 'text-amber-300 font-extrabold' : 'text-[#D6C7B2] font-bold'" class="truncate text-xs sm:text-sm font-serif-title">
+                <span :class="p.isMe ? 'text-[#7C4A12] font-extrabold' : 'text-[#2E2115] font-bold'" class="truncate text-xs sm:text-sm font-serif-title">
                   {{ p.name }}
                 </span>
-                <span v-if="p.isMe" class="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-400 text-black border border-amber-500 font-mono font-bold shrink-0">
+                <span v-if="p.isMe" class="text-[9px] px-1.5 py-0.2 rounded-full bg-[#B8822E]/16 text-[#6B420B] border border-[#A87222]/45 font-mono font-bold shrink-0">
                   本家
                 </span>
-                <span v-if="p.specialHand" class="text-[9px] px-1.5 py-0.2 rounded bg-yellow-400 text-black border border-yellow-500 font-bold shrink-0">
+                <span v-if="p.specialHand" class="text-[9px] px-1.5 py-0.2 rounded bg-[#B8822E]/16 text-[#6B420B] border border-[#A87222]/45 font-bold shrink-0">
                   👑 {{ p.specialHand.name }} (+{{ p.specialHand.bonusWater }}水)
                 </span>
-                <span v-if="p.isFoul" class="text-[9px] px-1.5 py-0.2 rounded bg-red-600/30 text-red-300 border border-red-500/50 font-bold shrink-0">
+                <span v-if="p.isFoul" class="text-[9px] px-1.5 py-0.2 rounded bg-[#DC2626]/12 text-[#9E2222] border border-[#B91C1C]/40 font-bold shrink-0">
                   ⚠️ 倒水
                 </span>
               </div>
 
               <div class="flex items-center gap-1 shrink-0 ml-1">
-                <span v-if="p.isShot && !p.isMe" class="text-[9px] px-1.5 py-0.2 rounded bg-amber-400 text-black border border-amber-500 font-bold">
+                <span v-if="p.isShot && !p.isMe" class="text-[9px] px-1.5 py-0.2 rounded bg-[#B8822E]/16 text-[#6B420B] border border-[#A87222]/45 font-bold">
                   💥 打枪
                 </span>
                 <span
                   class="font-mono font-bold text-[11px] sm:text-xs px-2 py-0.5 rounded-full border shadow-xs whitespace-nowrap tabular-nums shrink-0"
-                  :class="p.isMe ? (totalScore >= 0 ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50' : 'bg-red-950/80 text-red-300 border-red-500/50') : (p.netWater >= 0 ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50' : 'bg-red-950/80 text-red-300 border-red-500/50')"
+                  :class="p.isMe ? (totalScore >= 0 ? 'bg-[#10B981]/12 text-[#0F6E4A] border-[#0F6E4A]/35' : 'bg-[#DC2626]/10 text-[#A62828] border-[#A62828]/35') : (p.netWater > 0 ? 'bg-[#10B981]/12 text-[#0F6E4A] border-[#0F6E4A]/35' : p.netWater < 0 ? 'bg-[#DC2626]/10 text-[#A62828] border-[#A62828]/35' : 'bg-[#8C7355]/10 text-[#6E5942] border-[#8C7355]/25')"
                 >
                   {{ p.isMe ? (totalScore >= 0 ? `+${totalScore}` : totalScore) + ' 水 (总分)' : (p.netWater > 0 ? `我胜 +${p.netWater}` : p.netWater < 0 ? `我负 ${p.netWater}` : '打和 0') + ' 水' }}
                 </span>
@@ -457,20 +457,20 @@
               <div
                 class="flex-1 min-h-0 flex items-center justify-between rounded-xl px-2 py-0 border relative overflow-hidden shadow-inner"
                 :style="{
-                  backgroundColor: `${props.tableTheme?.edgeColor || '#1E3A8A'}88`,
-                  borderColor: `${props.tableTheme?.highlightColor || '#3B82F6'}40`
+                  backgroundColor: 'rgba(216, 198, 168, 0.48)',
+                  borderColor: 'rgba(140, 115, 85, 0.28)'
                 }"
               >
                 <div class="w-12 sm:w-14 shrink-0 flex flex-col justify-center leading-tight z-10 pr-0.5">
-                  <span class="text-amber-200 font-black text-[11px] sm:text-xs tracking-tight">头道</span>
-                  <span class="text-white/85 font-bold truncate text-[9px] sm:text-[10px] mt-0.5">{{ p.frontLabel }}</span>
+                  <span class="text-[#6B533B] font-black text-[11px] sm:text-xs tracking-tight">头道</span>
+                  <span class="text-[#2A1D12] font-bold truncate text-[9px] sm:text-[10px] mt-0.5">{{ p.frontLabel }}</span>
                 </div>
 
                 <div class="flex-1 min-w-0 h-full relative overflow-hidden flex items-start">
                   <div
                     v-for="(c, cIdx) in p.front"
                     :key="c.id"
-                    class="absolute top-0 w-11 sm:w-13 md:w-14.5 h-[195%] sm:h-[225%] md:h-[250%] min-h-[64px] sm:min-h-[76px] bg-white rounded-t-md shadow-xl overflow-hidden border border-neutral-600 ring-1 ring-black/40"
+                    class="absolute top-0 w-11 sm:w-13 md:w-14.5 h-[195%] sm:h-[225%] md:h-[250%] min-h-[64px] sm:min-h-[76px] bg-white rounded-t-md shadow-xl overflow-hidden border border-[#9A8468]/70 ring-1 ring-[#483624]/15"
                     :style="{ left: `calc(${cIdx} * 32px)`, zIndex: cIdx + 1 }"
                   >
                     <!-- 聚焦并超大放大左上角：点数与花色占据整个视口 -->
@@ -484,14 +484,14 @@
 
                 <div class="shrink-0 text-right ml-1 z-10">
                   <template v-if="p.isMe">
-                    <span v-if="myTierBonuses.head" class="text-[9px] font-black text-black bg-amber-400 px-1.5 py-0.5 rounded border border-amber-500 shadow-xs">
+                    <span v-if="myTierBonuses.head" class="text-[9px] font-black text-[#6B420B] bg-[#B8822E]/16 px-1.5 py-0.5 rounded border border-[#A87222]/45 shadow-xs">
                       {{ myTierBonuses.head }}
                     </span>
                   </template>
                   <template v-else-if="p.tiersDetail?.[0]">
                     <span
-                      class="text-[10px] font-mono font-black px-1.5 py-0.5 rounded border shadow-xs"
-                      :class="p.tiersDetail[0].winner === 'me' ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50' : p.tiersDetail[0].winner === 'opp' ? 'bg-red-950/90 text-red-300 border-red-500/50' : 'bg-neutral-900 text-neutral-400 border-white/15'"
+                      class="text-[10px] font-mono font-black px-1.5 py-0.5 rounded border shadow-xs tabular-nums"
+                      :class="p.tiersDetail[0].winner === 'me' ? 'bg-[#10B981]/12 text-[#0F6E4A] border-[#0F6E4A]/35' : p.tiersDetail[0].winner === 'opp' ? 'bg-[#DC2626]/10 text-[#A62828] border-[#A62828]/35' : 'bg-[#8C7355]/10 text-[#6E5942] border-[#8C7355]/25'"
                     >
                       {{ p.tiersDetail[0].winner === 'me' ? `+${p.tiersDetail[0].netWater}水` : p.tiersDetail[0].winner === 'opp' ? `${p.tiersDetail[0].netWater}水` : '0水' }}
                     </span>
@@ -503,20 +503,20 @@
               <div
                 class="flex-1 min-h-0 flex items-center justify-between rounded-xl px-2 py-0 border relative overflow-hidden shadow-inner"
                 :style="{
-                  backgroundColor: `${props.tableTheme?.edgeColor || '#1E3A8A'}88`,
-                  borderColor: `${props.tableTheme?.highlightColor || '#3B82F6'}40`
+                  backgroundColor: 'rgba(216, 198, 168, 0.48)',
+                  borderColor: 'rgba(140, 115, 85, 0.28)'
                 }"
               >
                 <div class="w-12 sm:w-14 shrink-0 flex flex-col justify-center leading-tight z-10 pr-0.5">
-                  <span class="text-blue-400 font-black text-[11px] sm:text-xs tracking-tight">中道</span>
-                  <span class="text-white/85 font-bold truncate text-[9px] sm:text-[10px] mt-0.5">{{ p.midLabel }}</span>
+                  <span class="text-[#6B533B] font-black text-[11px] sm:text-xs tracking-tight">中道</span>
+                  <span class="text-[#2A1D12] font-bold truncate text-[9px] sm:text-[10px] mt-0.5">{{ p.midLabel }}</span>
                 </div>
 
                 <div class="flex-1 min-w-0 h-full relative overflow-hidden flex items-start">
                   <div
                     v-for="(c, cIdx) in p.mid"
                     :key="c.id"
-                    class="absolute top-0 w-10 sm:w-12 md:w-13.5 h-[195%] sm:h-[225%] md:h-[250%] min-h-[64px] sm:min-h-[76px] bg-white rounded-t-md shadow-xl overflow-hidden border border-neutral-600 ring-1 ring-black/40"
+                    class="absolute top-0 w-10 sm:w-12 md:w-13.5 h-[195%] sm:h-[225%] md:h-[250%] min-h-[64px] sm:min-h-[76px] bg-white rounded-t-md shadow-xl overflow-hidden border border-[#9A8468]/70 ring-1 ring-[#483624]/15"
                     :style="{ left: `calc(${cIdx} * 23px)`, zIndex: cIdx + 1 }"
                   >
                     <!-- 聚焦并超大放大左上角：点数与花色占据整个视口 -->
@@ -530,14 +530,14 @@
 
                 <div class="shrink-0 text-right ml-1 z-10">
                   <template v-if="p.isMe">
-                    <span v-if="myTierBonuses.mid" class="text-[9px] font-black text-blue-300 bg-blue-500/25 px-1.5 py-0.5 rounded border border-blue-400/40 shadow-xs">
+                    <span v-if="myTierBonuses.mid" class="text-[9px] font-black text-[#6B420B] bg-[#B8822E]/16 px-1.5 py-0.5 rounded border border-[#A87222]/45 shadow-xs">
                       {{ myTierBonuses.mid }}
                     </span>
                   </template>
                   <template v-else-if="p.tiersDetail?.[1]">
                     <span
-                      class="text-[10px] font-mono font-black px-1.5 py-0.5 rounded border shadow-xs"
-                      :class="p.tiersDetail[1].winner === 'me' ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50' : p.tiersDetail[1].winner === 'opp' ? 'bg-red-950/90 text-red-300 border-red-500/50' : 'bg-neutral-900 text-neutral-400 border-white/15'"
+                      class="text-[10px] font-mono font-black px-1.5 py-0.5 rounded border shadow-xs tabular-nums"
+                      :class="p.tiersDetail[1].winner === 'me' ? 'bg-[#10B981]/12 text-[#0F6E4A] border-[#0F6E4A]/35' : p.tiersDetail[1].winner === 'opp' ? 'bg-[#DC2626]/10 text-[#A62828] border-[#A62828]/35' : 'bg-[#8C7355]/10 text-[#6E5942] border-[#8C7355]/25'"
                     >
                       {{ p.tiersDetail[1].winner === 'me' ? `+${p.tiersDetail[1].netWater}水` : p.tiersDetail[1].winner === 'opp' ? `${p.tiersDetail[1].netWater}水` : '0水' }}
                     </span>
@@ -549,20 +549,20 @@
               <div
                 class="flex-1 min-h-0 flex items-center justify-between rounded-xl px-2 py-0 border relative overflow-hidden shadow-inner"
                 :style="{
-                  backgroundColor: `${props.tableTheme?.edgeColor || '#1E3A8A'}88`,
-                  borderColor: `${props.tableTheme?.highlightColor || '#3B82F6'}40`
+                  backgroundColor: 'rgba(216, 198, 168, 0.48)',
+                  borderColor: 'rgba(140, 115, 85, 0.28)'
                 }"
               >
                 <div class="w-12 sm:w-14 shrink-0 flex flex-col justify-center leading-tight z-10 pr-0.5">
-                  <span class="text-purple-400 font-black text-[11px] sm:text-xs tracking-tight">尾道</span>
-                  <span class="text-white/85 font-bold truncate text-[9px] sm:text-[10px] mt-0.5">{{ p.backLabel }}</span>
+                  <span class="text-[#6B533B] font-black text-[11px] sm:text-xs tracking-tight">尾道</span>
+                  <span class="text-[#2A1D12] font-bold truncate text-[9px] sm:text-[10px] mt-0.5">{{ p.backLabel }}</span>
                 </div>
 
                 <div class="flex-1 min-w-0 h-full relative overflow-hidden flex items-start">
                   <div
                     v-for="(c, cIdx) in p.back"
                     :key="c.id"
-                    class="absolute top-0 w-10 sm:w-12 md:w-13.5 h-[195%] sm:h-[225%] md:h-[250%] min-h-[64px] sm:min-h-[76px] bg-white rounded-t-md shadow-xl overflow-hidden border border-neutral-600 ring-1 ring-black/40"
+                    class="absolute top-0 w-10 sm:w-12 md:w-13.5 h-[195%] sm:h-[225%] md:h-[250%] min-h-[64px] sm:min-h-[76px] bg-white rounded-t-md shadow-xl overflow-hidden border border-[#9A8468]/70 ring-1 ring-[#483624]/15"
                     :style="{ left: `calc(${cIdx} * 23px)`, zIndex: cIdx + 1 }"
                   >
                     <!-- 聚焦并超大放大左上角：点数与花色占据整个视口 -->
@@ -576,14 +576,14 @@
 
                 <div class="shrink-0 text-right ml-1 z-10">
                   <template v-if="p.isMe">
-                    <span v-if="myTierBonuses.tail" class="text-[9px] font-black text-purple-300 bg-purple-500/25 px-1.5 py-0.5 rounded border border-purple-400/40 shadow-xs">
+                    <span v-if="myTierBonuses.tail" class="text-[9px] font-black text-[#6B420B] bg-[#B8822E]/16 px-1.5 py-0.5 rounded border border-[#A87222]/45 shadow-xs">
                       {{ myTierBonuses.tail }}
                     </span>
                   </template>
                   <template v-else-if="p.tiersDetail?.[2]">
                     <span
-                      class="text-[10px] font-mono font-black px-1.5 py-0.5 rounded border shadow-xs"
-                      :class="p.tiersDetail[2].winner === 'me' ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50' : p.tiersDetail[2].winner === 'opp' ? 'bg-red-950/90 text-red-300 border-red-500/50' : 'bg-neutral-900 text-neutral-400 border-white/15'"
+                      class="text-[10px] font-mono font-black px-1.5 py-0.5 rounded border shadow-xs tabular-nums"
+                      :class="p.tiersDetail[2].winner === 'me' ? 'bg-[#10B981]/12 text-[#0F6E4A] border-[#0F6E4A]/35' : p.tiersDetail[2].winner === 'opp' ? 'bg-[#DC2626]/10 text-[#A62828] border-[#A62828]/35' : 'bg-[#8C7355]/10 text-[#6E5942] border-[#8C7355]/25'"
                     >
                       {{ p.tiersDetail[2].winner === 'me' ? `+${p.tiersDetail[2].netWater}水` : p.tiersDetail[2].winner === 'opp' ? `${p.tiersDetail[2].netWater}水` : '0水' }}
                     </span>
@@ -616,7 +616,6 @@
         @advance-carriage="onBookingAdvanceCarriage(false)"
         @new-carriage="onBookingAdvanceCarriage(true)"
         @simulate-settle="onBookingSimulateSettle"
-        @open-poster="emit('open-poster', $event)"
         @exit="emit('exit')"
       />
 
@@ -740,7 +739,6 @@ const emit = defineEmits<{
   (e: 'restart'): void;
   (e: 'fx', payload: any): void;
   (e: 'exit'): void;
-  (e: 'open-poster', payload?: any): void;
 }>();
 
 const mySeat = computed(() => {
@@ -2386,43 +2384,6 @@ function dealNewMatch(forceReApply = false, overrideDeal?: any) {
     requestAnimationFrame(() => {
       drawBoard();
     });
-  });
-}
-
-function openVictoryPoster() {
-  const isWin = totalScore.value > 0;
-  const isLoss = totalScore.value < 0;
-  const outcome: 'win' | 'lose' | 'draw' = isWin ? 'win' : isLoss ? 'lose' : 'draw';
-  const highlights: string[] = [];
-  if (mySpecialHand.value) {
-    highlights.push(`天降特殊牌型【${mySpecialHand.value.name}】(+${mySpecialHand.value.bonusWater}水)`);
-  }
-  if (isGrandSlam.value) {
-    highlights.push('横扫全场 · 打枪全垒打 (水数翻倍)');
-  }
-  if (frontTierLabel.value) {
-    highlights.push(`头道出招: ${frontTierLabel.value}`);
-  }
-  if (midTierLabel.value) {
-    highlights.push(`中道绝学: ${midTierLabel.value}`);
-  }
-  if (backTierLabel.value) {
-    highlights.push(`尾道镇场: ${backTierLabel.value}`);
-  }
-
-  emit('open-poster', {
-    gameType: '十三水',
-    gameTypeBadge: isEightPlayer.value ? '八人场' : '四人场',
-    gameMode: currentSceneLabel.value,
-    playerName: props.currentUser?.name || '雀坛国手',
-    playerAvatar: props.currentUser?.avatar || '👑',
-    outcome,
-    scoreDelta: totalScore.value,
-    scoreUnit: '水',
-    tableSummary: `头道[${frontTierLabel.value}] · 中道[${midTierLabel.value}] · 尾道[${backTierLabel.value}]`,
-    opponentSummary: `对战 ${displayedShowdownPlayers.value.filter((p) => !p.isMe).length} 位牌友`,
-    highlights,
-    customSealText: isGrandSlam.value ? '全垒大捷' : mySpecialHand.value ? '至尊龙威' : totalScore.value > 10 ? '横扫千军' : undefined,
   });
 }
 

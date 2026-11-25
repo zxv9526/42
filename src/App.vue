@@ -96,28 +96,7 @@
             <span>{{ isDownloadingApk ? downloadProgressText : 'APK' }}</span>
           </a>
 
-          <!-- 5. 战绩档案 & 成就装扮 -->
-          <button
-            type="button"
-            @click="showProfileModal = true"
-            class="h-9 sm:h-9.5 px-2.5 sm:px-3 rounded-xl bg-[#EFE5D3] hover:bg-[#E5D7C2] text-[#3C2C1E] font-serif font-bold text-xs flex items-center gap-1 shadow-sm transition-all active:scale-95 border border-[#D8C7B0] cursor-pointer whitespace-nowrap"
-            title="个人战绩档案、回放与音效设置"
-          >
-            <span class="text-xs">📊</span>
-            <span>战绩</span>
-          </button>
-
-          <button
-            type="button"
-            @click="showAchievementModal = true"
-            class="h-9 sm:h-9.5 px-2.5 sm:px-3 rounded-xl bg-[#EFE5D3] hover:bg-[#E5D7C2] text-[#3C2C1E] font-serif font-bold text-xs flex items-center gap-1 shadow-sm transition-all active:scale-95 border border-[#D8C7B0] cursor-pointer whitespace-nowrap"
-            title="成就挑战与牌桌主题切换"
-          >
-            <span class="text-xs">🏆</span>
-            <span>成就</span>
-          </button>
-
-          <!-- 6. 实时网络网速状态按钮 (点击可打开服务器与节点配置) -->
+          <!-- 5. 实时网络网速状态按钮 (点击可打开服务器与节点配置) -->
           <button
             type="button"
             @click="showServerConfigModal = true"
@@ -544,7 +523,6 @@
             @move="onGameMove"
             @restart="onGameRestart"
             @fx="onGameFx"
-            @open-poster="handleOpenPoster"
             @exit="returnToLobby(true)"
           />
           <MahjongCanvas
@@ -878,28 +856,6 @@
       @update:profile="onUpdateProfile"
     />
 
-    <!-- 3. 用户战绩档案与签到弹窗 -->
-    <UserProfileModal
-      v-if="showProfileModal"
-      :profile="userProfile"
-      :records="matchRecords"
-      @close="showProfileModal = false"
-      @update:profile="onUpdateProfile"
-      @update:records="onUpdateRecords"
-      @open-poster="handleOpenPoster"
-    />
-
-    <!-- 4. 成就挑战与牌桌装扮弹窗 -->
-    <AchievementModal
-      v-if="showAchievementModal"
-      :coins="userProfile.coins"
-      :profile="userProfile"
-      :records="matchRecords"
-      @close="showAchievementModal = false"
-      @claim="onClaimAchievement"
-      @theme-change="onThemeChange"
-    />
-
     <!-- 5. Android Termux 部署指南与性能监控弹窗 -->
     <TermuxDeploySection
       v-if="showTermuxModal"
@@ -1090,13 +1046,6 @@
       </div>
     </Teleport>
 
-    <!-- 9. 喜庆国风战绩海报生成弹窗 -->
-    <VictoryPosterModal
-      :show="showVictoryPosterModal"
-      :data="victoryPosterData"
-      @close="showVictoryPosterModal = false"
-    />
-
   </div>
 </template>
 
@@ -1104,13 +1053,10 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, shallowRef } from 'vue';
 import AuthModal from './components/AuthModal.vue';
 import PointsManageModal from './components/PointsManageModal.vue';
-import UserProfileModal from './components/UserProfileModal.vue';
-import AchievementModal from './components/AchievementModal.vue';
 import TermuxDeploySection from './components/TermuxDeploySection.vue';
 import Game3DEffects from './components/effects/Game3DEffects.vue';
 import InsufficientCoinsModal from './components/InsufficientCoinsModal.vue';
 import ServerConfigModal from './components/ServerConfigModal.vue';
-import VictoryPosterModal, { VictoryPosterData } from './components/VictoryPosterModal.vue';
 import { getRemoteServerUrl, getWebSocketUrl, isNativeApkEnvironment, resolveApiUrl, setAuthToken } from './utils/networkConfig';
 
 // 3 Canvas Games
@@ -1136,15 +1082,11 @@ import { TableTheme, getGameTheme } from './utils/theme';
 import {
   loadLocalProfile,
   saveLocalProfile,
-  loadLocalRecords,
-  saveLocalRecords,
   recordPointsTx,
   syncWithServer,
   clearLocalAuthData,
   resetToDefaultGuestProfile,
   UserProfile,
-  MatchRecord,
-  saveOfflinePracticeRecord,
 } from './utils/storage';
 import {
   type GameType,
@@ -1496,8 +1438,6 @@ const showChatDrawer = ref(false);
 
 const showAuthModal = ref(false);
 const showPointsModal = ref(false);
-const showProfileModal = ref(false);
-const showAchievementModal = ref(false);
 const showMahjongSceneModal = ref(false);
 const showTermuxModal = ref(false);
 const showServerConfigModal = ref(false);
@@ -1620,7 +1560,7 @@ async function handleDirectDownloadApk(event?: MouseEvent) {
 function handleServerUpdated(_newUrl: string) {
   connectWs();
   if (userProfile.isLoggedIn) {
-    syncWithServer(userProfile, matchRecords);
+    syncWithServer(userProfile, []);
   }
 }
 const showInsufficientModal = ref(false);
@@ -1705,7 +1645,6 @@ const userProfile = reactive<UserProfile>(loadLocalProfile());
 if (!userProfile.avatar || userProfile.avatar === '🀄') {
   userProfile.avatar = '👑';
 }
-const matchRecords = reactive<MatchRecord[]>(loadLocalRecords());
 const currentTheme = ref<TableTheme>(getGameTheme('yansan'));
 const soundOn = ref(soundFX.enabled);
 
@@ -1832,57 +1771,6 @@ function startOfflineSoloGame(gt: GameType, sceneMode: string) {
   soundFX.playTap();
   startPracticeGame(gt, sceneMode);
   triggerSpeechBubble('🎮 已进入离线单机试玩模式，3位智能AI陪练已就位！');
-}
-
-// 喜庆高光战绩海报状态
-const showVictoryPosterModal = ref(false);
-const victoryPosterData = ref<VictoryPosterData>({
-  gameType: '十三水',
-  gameTypeBadge: '四人场',
-  playerName: '雀坛国手',
-  playerAvatar: '👑',
-  outcome: 'win',
-  scoreDelta: 16,
-  scoreUnit: '水',
-  tableSummary: '头道冲三 · 中道葫芦 · 尾道同花顺',
-  highlights: ['横扫全场 · 打枪全垒打 (+16水)', '三道全胜通关'],
-  customSealText: '雀圣绝顶',
-});
-
-function handleOpenPoster(payload?: Partial<VictoryPosterData>) {
-  if (payload) {
-    victoryPosterData.value = {
-      gameType: payload.gameType || (activeGameType.value === 'yansan' ? '经典烟三' : activeGameType.value === 'mahjong' ? '经典麻将' : '十三水'),
-      gameTypeBadge: payload.gameTypeBadge || currentSceneDisplayName.value,
-      gameMode: payload.gameMode || currentSceneDisplayName.value,
-      playerName: payload.playerName || userProfile.name || '雀坛国手',
-      playerAvatar: payload.playerAvatar || userProfile.avatar || '👑',
-      outcome: payload.outcome || 'win',
-      scoreDelta: typeof payload.scoreDelta === 'number' ? payload.scoreDelta : 0,
-      scoreUnit: payload.scoreUnit || (payload.gameType === '十三水' ? '水' : '分'),
-      tableSummary: payload.tableSummary,
-      opponentSummary: payload.opponentSummary,
-      highlights: payload.highlights || ['牌逢敌手，棋高一着', '神技卓绝，惊艳四座'],
-      customSealText: payload.customSealText,
-    };
-  } else {
-    const lastRecord = matchRecords[0];
-    if (lastRecord) {
-      victoryPosterData.value = {
-        gameType: lastRecord.gameType === 'yansan' ? '经典烟三' : lastRecord.gameType === 'mahjong' ? '经典麻将' : '十三水',
-        gameTypeBadge: lastRecord.gameName || lastRecord.gameType,
-        playerName: userProfile.name || '雀坛国手',
-        playerAvatar: userProfile.avatar || '👑',
-        outcome: lastRecord.result === 'win' ? 'win' : lastRecord.result === 'lose' ? 'lose' : 'draw',
-        scoreDelta: lastRecord.coinsDelta ?? 0,
-        scoreUnit: lastRecord.gameType === 'shisanshui' ? '水' : '分',
-        tableSummary: `${lastRecord.timestamp || ''} · ${lastRecord.gameName || '经典对局'}`,
-        highlights: [lastRecord.details || '技高一筹，所向披靡'],
-        customSealText: (lastRecord.coinsDelta ?? 0) > 0 ? '雀圣绝顶' : undefined,
-      };
-    }
-  }
-  showVictoryPosterModal.value = true;
 }
 
 // 移动端/锁屏唤醒平滑恢复网络浮动标识 (Smooth Reconnection Indicator)
@@ -3137,23 +3025,6 @@ function connectWs(forceReconnect = false) {
         }
       } else if (msg.type === 'booking_0600_settled') {
         if (msg.userId && (msg.userId === userProfile.id || (myAssignedPlayerId.value && msg.userId === myAssignedPlayerId.value))) {
-          if (msg.record) {
-            const rec: MatchRecord = {
-              id: msg.record.id || `BOOK-${Date.now()}`,
-              gameType: 'shisanshui',
-              gameName: msg.sceneMode === 'eight-booking' ? '十三张·八人预约专列' : '十三张·四人预约专列',
-              result: (msg.delta || 0) > 0 ? 'win' : (msg.delta || 0) < 0 ? 'lose' : 'draw',
-              coinsDelta: msg.delta || 0,
-              ratingDelta: Math.round((msg.record.totalWater || 0) * 1.2),
-              details: `第${msg.record.carriageNumber || 1}节车厢 (${msg.record.settledTablesCount || 0}桌06:00结算) · 净胜 ${(msg.record.totalWater || 0) >= 0 ? `+${msg.record.totalWater}` : msg.record.totalWater} 水`,
-              timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-            };
-            if (!matchRecords.some((r) => r.id === rec.id)) {
-              matchRecords.unshift(rec);
-              if (matchRecords.length > 50) matchRecords.pop();
-              saveLocalRecords(matchRecords, userProfile.phone || userProfile.id);
-            }
-          }
           fetchFreshProfile();
         }
       } else if (msg.type === 'all_users_coins_updated') {
@@ -3684,7 +3555,7 @@ function onGameMove(payload: any) {
     lastSettledMatchKey = roundKey;
     lastSettledMatchTime = now;
 
-    const { isWin, isTie, scorePoints, coinsDelta, ratingDelta, detailText, replayData } =
+    const { isWin, isTie, scorePoints, coinsDelta, ratingDelta } =
       calculateGameSettlement(activeGameType.value, payload);
 
     // 专属输赢分语音播报（仅玩家本地设备能够听到，试玩演练模式也播报给玩家提供完整局内反馈）
@@ -3692,21 +3563,6 @@ function onGameMove(payload: any) {
 
     // 【单机试玩模拟对局结算】：人机试玩模式仅模拟真实场景供玩家演练推演，坚决不写入玩家的真实积分与钱庄筹码资产
     if (isPracticeMode.value) {
-      try {
-        const practiceRec: MatchRecord = {
-          id: `practice-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          gameType: activeGameType.value,
-          gameName: `${getGameName(activeGameType.value)} (单机试玩)`,
-          result: isWin ? 'win' : (isTie ? 'draw' : 'lose'),
-          coinsDelta,
-          ratingDelta,
-          details: `${detailText} [人机试玩模拟]`,
-          timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-          updatedAt: Date.now(),
-        };
-        saveOfflinePracticeRecord(practiceRec);
-      } catch {}
-
       console.info('[人机试玩模式] 对局结束，模拟结算已完成（按规则不写入玩家真实积分）：', {
         simulatedCoinsDelta: coinsDelta,
         scorePoints,
@@ -3746,20 +3602,6 @@ function onGameMove(payload: any) {
       userProfile.phone || userProfile.id
     );
 
-    const rec: MatchRecord = {
-      id: `REC-${Date.now()}`,
-      gameType: activeGameType.value,
-      gameName: getGameName(activeGameType.value),
-      result: isWin ? 'win' : (isTie ? 'draw' : 'lose'),
-      coinsDelta,
-      ratingDelta,
-      details: detailText,
-      timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-      replayData,
-    };
-
-    matchRecords.unshift(rec);
-    if (matchRecords.length > 50) matchRecords.pop();
     if (activeRoom.value) {
       activeRoom.value.status = 'finished';
       if (activeRoom.value.boardState) {
@@ -3767,13 +3609,12 @@ function onGameMove(payload: any) {
       }
     }
     saveLocalProfile(userProfile);
-    saveLocalRecords(matchRecords, userProfile.phone || userProfile.id);
     syncAndCheckProfile();
   }
 }
 
 async function syncAndCheckProfile() {
-  const res = await syncWithServer(userProfile, matchRecords);
+  const res = await syncWithServer(userProfile, []);
   if (res && res.notFound) {
     const guest = resetToDefaultGuestProfile();
     Object.assign(userProfile, guest);
@@ -3858,28 +3699,8 @@ function onUpdateProfile(p: UserProfile) {
   Object.assign(userProfile, p);
   setAuthToken(userProfile.sessionToken || '');
   saveLocalProfile(userProfile);
-  const freshRecords = loadLocalRecords(userProfile.phone || userProfile.id);
-  matchRecords.splice(0, matchRecords.length, ...freshRecords);
   notifyPresence(activeGameType.value || 'lobby', activeSceneMode.value || '');
   syncAndCheckProfile();
-}
-
-function onUpdateRecords(r: MatchRecord[]) {
-  matchRecords.splice(0, matchRecords.length, ...r);
-  saveLocalRecords(matchRecords, userProfile.phone || userProfile.id);
-  syncAndCheckProfile();
-}
-
-function onClaimAchievement(reward: number) {
-  userProfile.coins += reward;
-  recordPointsTx('admin_grant', '雀神成就奖励领取', reward, userProfile.coins, userProfile.phone || userProfile.id);
-  saveLocalProfile(userProfile);
-  syncAndCheckProfile();
-}
-
-function onThemeChange(th: TableTheme) {
-  currentTheme.value = th;
-  soundFX.playTap();
 }
 
 function toggleSound() {

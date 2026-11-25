@@ -823,7 +823,6 @@ const emit = defineEmits<{
   (e: 'new-carriage'): void;
   (e: 'simulate-settle'): void;
   (e: 'exit'): void;
-  (e: 'open-poster'): void;
 }>();
 
 const allArchivedCarriages = computed(() => {

@@ -16,7 +16,7 @@
                 {{ isLoggedIn ? '用户账号管理' : (authTab === 'login' ? '牌友登录' : '新秀注册') }}
               </h3>
               <p class="text-[10px] sm:text-[11px] text-[#6B5744] truncate">
-                {{ isLoggedIn ? '管理对局身份与云端战绩' : (authTab === 'login' ? '输入手机号与密码快速登录' : '仅限 Telegram 白名单授权手机号注册激活') }}
+                {{ isLoggedIn ? '管理对局身份与个人名号' : (authTab === 'login' ? '输入手机号与密码快速登录' : '仅限 Telegram 白名单授权手机号注册激活') }}
               </p>
             </div>
           </div>
