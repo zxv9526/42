@@ -73,7 +73,7 @@
           <div class="space-y-3.5">
             <div class="p-3.5 rounded-2xl bg-white/80 border border-[#D8C7B0] shadow-xs space-y-2">
               <h4 class="font-black text-amber-900 font-serif-title flex items-center gap-1.5 text-sm sm:text-base border-b border-amber-200 pb-1">
-                <span>📊 三道胜出直接计分规则（实时场 1水 = 50分 · 预约专列 1水 = 1分）</span>
+                <span>📊 三道胜出直接计分规则（全模式统一：1水 = 1积分）</span>
               </h4>
               <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse font-sans text-xs">

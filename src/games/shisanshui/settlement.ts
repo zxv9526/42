@@ -12,7 +12,7 @@ export function calculateShisanshuiSettlement(payload: ShisanshuiMovePayload): S
   const isWin = netWater > 0;
   const isTie = netWater === 0;
 
-  const coinsDelta = netWater * 50;
+  const coinsDelta = netWater;
   const scorePoints = netWater; // 1水即1分
   const ratingDelta = Math.round(netWater * 2.5);
 

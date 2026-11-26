@@ -336,22 +336,16 @@
             </span>
           </div>
 
-          <!-- 中间：总净水与战报 -->
+          <!-- 中间：本局总分与战报 -->
           <div class="flex items-center gap-2 sm:gap-3 shrink-0">
             <div class="flex items-center gap-1.5">
-              <span class="text-[10px] text-[#6E5942] hidden sm:inline">本局总净水:</span>
+              <span class="text-[10px] text-[#6E5942] hidden sm:inline">本局总分:</span>
               <span
                 class="text-sm sm:text-base font-black font-mono tracking-tight tabular-nums"
                 :class="totalScore >= 0 ? 'text-[#0F6E4A]' : 'text-[#A62828]'"
               >
-                {{ totalScore >= 0 ? `+${totalScore}` : totalScore }}
-                <span class="text-[10px] text-[#4A3623] font-sans font-bold">水</span>
-              </span>
-              <span
-                class="text-xs font-mono font-bold ml-1 tabular-nums"
-                :class="totalScore >= 0 ? 'text-[#8B5A12]' : 'text-[#A62828]'"
-              >
-                🪙 {{ totalScore * 50 >= 0 ? `+${totalScore * 50}` : `${totalScore * 50}` }} 分
+                🪙 {{ totalScore >= 0 ? `+${totalScore}` : totalScore }}
+                <span class="text-[10px] text-[#4A3623] font-sans font-bold">分</span>
               </span>
             </div>
 
@@ -403,7 +397,7 @@
             <span>👑 本家手牌提示:</span>
             <span class="text-[#2E2115] font-normal font-mono">头道 [{{ frontTierLabel }}] · 中道 [{{ midTierLabel }}] · 尾道 [{{ backTierLabel }}]</span>
           </span>
-          <span class="font-mono font-bold text-[#3A2919] tabular-nums">总分: {{ totalScore >= 0 ? `+${totalScore}` : totalScore }} 水</span>
+          <span class="font-mono font-bold text-[#3A2919] tabular-nums">总分: {{ totalScore >= 0 ? `+${totalScore}` : totalScore }} 分</span>
         </div>
 
         <!-- 田字型四格对决核心区 (2列 × 2行) -->
@@ -431,7 +425,7 @@
                   本家
                 </span>
                 <span v-if="p.specialHand" class="text-[9px] px-1.5 py-0.2 rounded bg-[#B8822E]/16 text-[#6B420B] border border-[#A87222]/45 font-bold shrink-0">
-                  👑 {{ p.specialHand.name }} (+{{ p.specialHand.bonusWater }}水)
+                  👑 {{ p.specialHand.name }} (+{{ p.specialHand.bonusWater }}分)
                 </span>
                 <span v-if="p.isFoul" class="text-[9px] px-1.5 py-0.2 rounded bg-[#DC2626]/12 text-[#9E2222] border border-[#B91C1C]/40 font-bold shrink-0">
                   ⚠️ 倒水
@@ -446,7 +440,7 @@
                   class="font-mono font-bold text-[11px] sm:text-xs px-2 py-0.5 rounded-full border shadow-xs whitespace-nowrap tabular-nums shrink-0"
                   :class="p.isMe ? (totalScore >= 0 ? 'bg-[#10B981]/12 text-[#0F6E4A] border-[#0F6E4A]/35' : 'bg-[#DC2626]/10 text-[#A62828] border-[#A62828]/35') : (p.netWater > 0 ? 'bg-[#10B981]/12 text-[#0F6E4A] border-[#0F6E4A]/35' : p.netWater < 0 ? 'bg-[#DC2626]/10 text-[#A62828] border-[#A62828]/35' : 'bg-[#8C7355]/10 text-[#6E5942] border-[#8C7355]/25')"
                 >
-                  {{ p.isMe ? (totalScore >= 0 ? `+${totalScore}` : totalScore) + ' 水 (总分)' : (p.netWater > 0 ? `我胜 +${p.netWater}` : p.netWater < 0 ? `我负 ${p.netWater}` : '打和 0') + ' 水' }}
+                  {{ p.isMe ? (totalScore >= 0 ? `+${totalScore}` : totalScore) + ' 分 (总分)' : (p.netWater > 0 ? `我胜 +${p.netWater}` : p.netWater < 0 ? `我负 ${p.netWater}` : '打和 0') + ' 分' }}
                 </span>
               </div>
             </div>
@@ -493,7 +487,7 @@
                       class="text-[10px] font-mono font-black px-1.5 py-0.5 rounded border shadow-xs tabular-nums"
                       :class="p.tiersDetail[0].winner === 'me' ? 'bg-[#10B981]/12 text-[#0F6E4A] border-[#0F6E4A]/35' : p.tiersDetail[0].winner === 'opp' ? 'bg-[#DC2626]/10 text-[#A62828] border-[#A62828]/35' : 'bg-[#8C7355]/10 text-[#6E5942] border-[#8C7355]/25'"
                     >
-                      {{ p.tiersDetail[0].winner === 'me' ? `+${p.tiersDetail[0].netWater}水` : p.tiersDetail[0].winner === 'opp' ? `${p.tiersDetail[0].netWater}水` : '0水' }}
+                      {{ p.tiersDetail[0].winner === 'me' ? `+${p.tiersDetail[0].netWater}分` : p.tiersDetail[0].winner === 'opp' ? `${p.tiersDetail[0].netWater}分` : '0分' }}
                     </span>
                   </template>
                 </div>
@@ -539,7 +533,7 @@
                       class="text-[10px] font-mono font-black px-1.5 py-0.5 rounded border shadow-xs tabular-nums"
                       :class="p.tiersDetail[1].winner === 'me' ? 'bg-[#10B981]/12 text-[#0F6E4A] border-[#0F6E4A]/35' : p.tiersDetail[1].winner === 'opp' ? 'bg-[#DC2626]/10 text-[#A62828] border-[#A62828]/35' : 'bg-[#8C7355]/10 text-[#6E5942] border-[#8C7355]/25'"
                     >
-                      {{ p.tiersDetail[1].winner === 'me' ? `+${p.tiersDetail[1].netWater}水` : p.tiersDetail[1].winner === 'opp' ? `${p.tiersDetail[1].netWater}水` : '0水' }}
+                      {{ p.tiersDetail[1].winner === 'me' ? `+${p.tiersDetail[1].netWater}分` : p.tiersDetail[1].winner === 'opp' ? `${p.tiersDetail[1].netWater}分` : '0分' }}
                     </span>
                   </template>
                 </div>
@@ -585,7 +579,7 @@
                       class="text-[10px] font-mono font-black px-1.5 py-0.5 rounded border shadow-xs tabular-nums"
                       :class="p.tiersDetail[2].winner === 'me' ? 'bg-[#10B981]/12 text-[#0F6E4A] border-[#0F6E4A]/35' : p.tiersDetail[2].winner === 'opp' ? 'bg-[#DC2626]/10 text-[#A62828] border-[#A62828]/35' : 'bg-[#8C7355]/10 text-[#6E5942] border-[#8C7355]/25'"
                     >
-                      {{ p.tiersDetail[2].winner === 'me' ? `+${p.tiersDetail[2].netWater}水` : p.tiersDetail[2].winner === 'opp' ? `${p.tiersDetail[2].netWater}水` : '0水' }}
+                      {{ p.tiersDetail[2].winner === 'me' ? `+${p.tiersDetail[2].netWater}分` : p.tiersDetail[2].winner === 'opp' ? `${p.tiersDetail[2].netWater}分` : '0分' }}
                     </span>
                   </template>
                 </div>
@@ -1149,7 +1143,7 @@ const allShowdownPlayers = computed<ShowdownPlayer[]>(() => {
     frontLabel: frontTierLabel.value,
     midLabel: midTierLabel.value,
     backLabel: backTierLabel.value,
-    summary: `本局总战果：${totalScore.value >= 0 ? `+${totalScore.value}` : totalScore.value} 水`,
+    summary: `本局总战果：${totalScore.value >= 0 ? `+${totalScore.value}` : totalScore.value} 分`,
   });
 
   // 2. 对手席位

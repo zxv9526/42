@@ -119,7 +119,7 @@ export function settleShisanshuiRound(ctx: RealtimeHubContext, room: any, isTime
 
   ctx.settleRoomCoins(
     room,
-    netWaters.map((w) => w * 50),
+    netWaters.map((w) => Math.trunc(w)),
     'shisanshui',
     { ratingDeltaBySeat: netWaters.map((w) => Math.round(w * 2.5)) }
   );

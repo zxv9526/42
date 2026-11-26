@@ -1397,7 +1397,7 @@ func settleShisanshuiRound(ctx *HubContext, room *RoomState, isTimeout bool) {
 		preps = append(preps, prepareSSSPlayer(s, pName, sub))
 	}
 
-	results := settleAllSSSPlayers(preps, 50)
+	results := settleAllSSSPlayers(preps, 1)
 	var winnerSeat *int
 	bestWater := -999999
 	coinsDelta := make([]int, totalSeats)

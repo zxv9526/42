@@ -3,37 +3,6 @@
     :class="isRotated90 ? 'app-rotated-90' : 'app-standard'"
     class="bg-[#EFE5D3] text-[#3C2C1E] selection:bg-[#DECBA4] selection:text-[#2C1D11] select-none overflow-hidden"
   >
-    <!-- 实时网络与在线状态浮动提示条 (含指数退避重试倒计时、立即重连与一键单机试玩) -->
-    <div
-      v-if="!isOnline || (!wsInitGraceActive && !wsConnected)"
-      class="bg-gradient-to-r from-red-950 via-stone-900 to-red-950 text-white text-[10px] sm:text-[11px] py-1 px-3 text-center z-50 flex items-center justify-center gap-2 shadow shrink-0 font-medium border-b border-red-500/40"
-    >
-      <span class="animate-pulse">🔴</span>
-      <span v-if="!isOnline">当前设备处于离线状态，等待网络恢复...</span>
-      <span v-else-if="isWsConnecting">正在重新连接服务器并自动恢复对局...</span>
-      <span v-else>当前网络波动或后台休眠已断开 ({{ reconnectCountdown }}s后自动重连)</span>
-      <button
-        type="button"
-        @click="triggerManualReconnect"
-        class="px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold cursor-pointer transition-all active:scale-95"
-      >
-        ⚡ 立即重连
-      </button>
-      <button
-        type="button"
-        @click="showOfflineSoloModal = true"
-        class="px-2 py-0.5 rounded bg-amber-500/30 hover:bg-amber-500/50 text-amber-200 text-[10px] font-bold cursor-pointer transition-all active:scale-95 border border-amber-400/40"
-      >
-        🎮 离线单机试玩
-      </button>
-      <button
-        type="button"
-        @click="showServerConfigModal = true"
-        class="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold underline cursor-pointer"
-      >
-        ⚙️ 服务器配置/测速
-      </button>
-    </div>
 
     <!-- 3D Hardware-Accelerated Special Effects & Particle Engine -->
     <Game3DEffects ref="fxRef" />
@@ -96,13 +65,13 @@
             <span>{{ isDownloadingApk ? downloadProgressText : 'APK' }}</span>
           </a>
 
-          <!-- 5. 实时网络网速状态按钮 (点击可打开服务器与节点配置) -->
+          <!-- 5. 实时网络网速状态按钮 (普通玩家仅静默检测状态，管理员可打开配置) -->
           <button
             type="button"
-            @click="showServerConfigModal = true"
+            @click="handleNetworkStatusClick"
             class="h-9 sm:h-9.5 px-2.5 sm:px-3 rounded-xl border text-xs font-mono font-bold flex items-center gap-1 shadow-sm whitespace-nowrap select-none cursor-pointer transition-all active:scale-95 hover:brightness-95"
             :class="networkStatusColorClass"
-            :title="`实时网络状态：${networkStatusText} (${wsRtt}ms) · 点击配置服务器节点`"
+            :title="userProfile.isAdmin ? `实时网络状态：${networkStatusText} (${wsRtt}ms) · 管理员配置服务器` : `实时网络状态：${networkStatusText} (${wsRtt}ms)`"
           >
             <span class="relative flex h-2 w-2 items-center justify-center shrink-0">
               <span
@@ -863,9 +832,9 @@
       @close="showTermuxModal = false"
     />
 
-    <!-- 6b. 服务器网络与节点配置弹窗 -->
+    <!-- 6b. 服务器网络与节点配置弹窗 (仅管理员可访问，防止普通玩家误触乱改配置) -->
     <ServerConfigModal
-      v-if="showServerConfigModal"
+      v-if="showServerConfigModal && userProfile.isAdmin"
       :is-admin="Boolean(userProfile.isAdmin)"
       @close="showServerConfigModal = false"
       @server-updated="handleServerUpdated"
@@ -1771,6 +1740,19 @@ function triggerManualReconnect() {
     fetchFreshProfile();
   }
   triggerSpeechBubble('正在尝试立即重新连接网络并恢复对局...');
+}
+
+function handleNetworkStatusClick() {
+  if (userProfile.isAdmin) {
+    showServerConfigModal.value = true;
+  } else {
+    // 普通玩家不弹窗配置，静默检测网络并在未连通时触发后台重连，防止玩家误触乱改配置
+    if (!wsConnected.value) {
+      connectWs(true);
+    } else {
+      sendPing();
+    }
+  }
 }
 
 function startOfflineSoloGame(gt: GameType, sceneMode: string) {
